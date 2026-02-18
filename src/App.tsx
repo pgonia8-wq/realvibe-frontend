@@ -1,69 +1,44 @@
 import { useState } from "react";
+import "./index.css";
 
 export default function App() {
   const [swipes] = useState(9);
   const [wld] = useState(0);
-  const profiles: any[] = [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 flex justify-center">
-      <div className="w-full max-w-md p-4">
-        <h1 className="text-3xl font-bold text-center mb-2">
-          RealVibe 3.0
-        </h1>
+    <div style={{display:"flex", flexDirection:"column", alignItems:"center", paddingTop:"30px"}}>
 
-        <p className="text-center text-gray-600 mb-6">
-          Swipes gratis: {swipes} | WLD: {wld}
-        </p>
+      <h1 style={{fontSize:"2.5rem", fontWeight:800}}>
+        RealVibe 3.0
+      </h1>
 
-        <div className="bg-white rounded-3xl shadow-xl h-[420px] flex items-center justify-center mb-6">
-          {profiles.length === 0 ? (
-            <p className="text-gray-400">
-              No hay perfiles disponibles
-            </p>
-          ) : (
-            <div>Perfil aquí</div>
-          )}
-        </div>
-
-        <div className="flex justify-between gap-3 mb-6">
-          <button className="flex-1 bg-gray-300 py-3 rounded-xl">
-            Dislike
-          </button>
-
-          <button className="flex-1 bg-pink-500 text-white py-3 rounded-xl">
-            Like
-          </button>
-
-          <button className="flex-1 bg-blue-500 text-white py-3 rounded-xl">
-            Super
-          </button>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold mb-3">
-            Funciones Premium
-          </h2>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button className="bg-yellow-400 py-3 rounded-xl">
-              Boost 1 WLD
-            </button>
-
-            <button className="bg-yellow-500 py-3 rounded-xl">
-              Gold 10 WLD
-            </button>
-
-            <button className="bg-orange-500 py-3 rounded-xl">
-              Platinum 25 WLD
-            </button>
-
-            <button className="bg-red-500 py-3 rounded-xl">
-              Diamond 40 WLD
-            </button>
-          </div>
-        </div>
+      <div className="counter">
+        Swipes gratis: {swipes} | WLD: {wld}
       </div>
+
+      <div className="card-container" style={{marginTop:"20px"}}>
+        <img src="https://picsum.photos/300/300" alt="profile" />
+        <h2>Demo Profile</h2>
+        <p>Esta es una tarjeta de ejemplo mientras conectamos backend.</p>
+      </div>
+
+      <div className="buttons-container">
+        <button className="btn-dislike">Dislike</button>
+        <button className="btn-like">Like</button>
+        <button className="btn-superlike">Super</button>
+      </div>
+
+      <h2 style={{marginTop:"30px", fontWeight:700}}>
+        Funciones Premium
+      </h2>
+
+      <div className="buttons-container">
+        <button className="btn-boost">Boost 1 WLD</button>
+        <button className="btn-gold">Gold 10 WLD</button>
+        <button className="btn-platinum">Platinum 25 WLD</button>
+        <button className="btn-diamond">Diamond 40 WLD</button>
+      </div>
+
     </div>
   );
-              }
+}
