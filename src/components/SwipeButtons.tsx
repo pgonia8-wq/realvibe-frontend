@@ -6,7 +6,7 @@ interface SwipeButtonsProps {
 
 export default function SwipeButtons({ onAction }: SwipeButtonsProps) {
   return (
-    <div className="flex flex-wrap justify-center mt-4 gap-2">
+    <div className="buttons-container">
       <button className="btn-dislike" onClick={() => onAction("DISLIKE")}>Dislike</button>
       <button className="btn-superlike" onClick={() => onAction("SUPERLIKE", 1)}>Super Like 1 WLD</button>
       <button className="btn-like" onClick={() => onAction("LIKE")}>Like</button>
@@ -16,4 +16,4 @@ export default function SwipeButtons({ onAction }: SwipeButtonsProps) {
       <button className="btn-diamond" onClick={() => onAction("DIAMOND", 40)}>Diamond 40 WLD</button>
     </div>
   );
-                                                                                      }
+}
