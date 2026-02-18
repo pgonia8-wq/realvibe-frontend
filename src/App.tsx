@@ -1,3 +1,4 @@
+// src/App.tsx
 import { Switch, Route } from "wouter";
 import HomePage from "./pages/HomePage";
 import AuthPage from "./pages/AuthPage";
