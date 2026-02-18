@@ -1,3 +1,4 @@
+// src/pages/AuthPage.tsx
 import React from "react";
 
 const AuthPage: React.FC = () => {
