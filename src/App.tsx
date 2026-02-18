@@ -7,63 +7,61 @@ type Profile = {
 };
 
 export default function App() {
-  // ---- Estado principal ----
   const [currentScreen, setCurrentScreen] = useState<'home' | 'profileEdit'>('home');
+  const [swipeIndex, setSwipeIndex] = useState(0);
   const [profile, setProfile] = useState<Profile>({
     name: 'Demo Profile',
-    description: 'Esta es una tarjeta de ejemplo mientras conectamos backend.',
-    image: 'https://picsum.photos/400/300', // imagen de ejemplo
+    description: 'Amante de la música y los viajes',
+    image: 'https://picsum.photos/400/400',
   });
-  const [swipeIndex, setSwipeIndex] = useState(0);
 
-  // ---- Swipe (simulado) ----
-  const cards = [profile, profile, profile]; // simula varias tarjetas
-  const swipeNext = () => {
-    if (swipeIndex < cards.length - 1) setSwipeIndex(swipeIndex + 1);
-    else alert('No hay más perfiles');
-  };
+  // Lista de perfiles para swipe (puedes conectar backend luego)
+  const cards = [
+    { name: 'Alex', description: 'Aventurero y divertido', image: 'https://placekitten.com/400/400' },
+    { name: 'José', description: 'Amante de la música', image: 'https://placekitten.com/401/400' },
+    { name: 'Josesito', description: 'Fan del cine', image: 'https://placekitten.com/402/400' },
+  ];
 
-  // ---- Guardar perfil en localStorage ----
+  // Cargar perfil de localStorage
   useEffect(() => {
     const storedProfile = localStorage.getItem('userProfile');
     if (storedProfile) setProfile(JSON.parse(storedProfile));
   }, []);
 
+  // Guardar perfil en localStorage
   const saveProfile = (newProfile: Profile) => {
     setProfile(newProfile);
     localStorage.setItem('userProfile', JSON.stringify(newProfile));
     setCurrentScreen('home');
   };
 
+  // Swipe simple
+  const handleSwipe = () => {
+    if (swipeIndex < cards.length - 1) setSwipeIndex(swipeIndex + 1);
+    else setSwipeIndex(0); // vuelve al inicio
+  };
+
   return (
     <div style={{
-      backgroundColor: '#4B001F', // bordeux
+      backgroundColor: '#4B001F',
       minHeight: '100vh',
       fontFamily: "'Plus Jakarta Sans', sans-serif",
       color: '#fff',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      padding: '10px'
+      padding:'10px'
     }}>
       {currentScreen === 'home' && (
         <>
           {/* Header */}
           <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
             <button onClick={() => alert('Salir de la app')} style={{
-              background:'transparent',
-              color:'#fff',
-              fontSize:'1.5rem',
-              border:'none',
-              cursor:'pointer'
+              background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'
             }}>←</button>
             <h1>RealVibe 3.0</h1>
             <button onClick={() => setCurrentScreen('profileEdit')} style={{
-              background:'transparent',
-              color:'#fff',
-              fontSize:'1.5rem',
-              border:'none',
-              cursor:'pointer'
+              background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'
             }}>⚙️</button>
           </div>
 
@@ -78,17 +76,17 @@ export default function App() {
             maxWidth:'400px',
             padding:'10px',
             textAlign:'center',
-            marginTop:'10px',
-            flexShrink:0
+            marginTop:'10px'
           }}>
             <img 
               src={cards[swipeIndex].image} 
               alt="profile" 
               style={{
-                width:'100%',
-                height:'250px',
+                width:'90%',
+                height:'300px',
                 borderRadius:'15px',
-                objectFit:'cover'
+                objectFit:'cover',
+                marginTop:'10px'
               }}
             />
             <h2>{cards[swipeIndex].name}</h2>
@@ -97,9 +95,9 @@ export default function App() {
 
           {/* Botones de swipe */}
           <div style={{display:'flex', justifyContent:'center', gap:'10px', marginTop:'10px', flexWrap:'wrap'}}>
-            <button onClick={swipeNext} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
-            <button onClick={swipeNext} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
-            <button onClick={swipeNext} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
+            <button onClick={handleSwipe} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
+            <button onClick={handleSwipe} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
+            <button onClick={handleSwipe} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
           </div>
 
           {/* Funciones premium */}
@@ -127,22 +125,22 @@ export default function App() {
           <h2>Editar Perfil</h2>
           <label>
             Nombre:
-            <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
+            <input type="text" value={profile.name} onChange={(e)=>setProfile({...profile,name:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
           </label>
           <label>
             Descripción:
-            <textarea value={profile.description} onChange={(e) => setProfile({...profile, description:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
+            <textarea value={profile.description} onChange={(e)=>setProfile({...profile,description:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
           </label>
           <label>
             URL de imagen:
-            <input type="text" value={profile.image} onChange={(e) => setProfile({...profile, image:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
+            <input type="text" value={profile.image} onChange={(e)=>setProfile({...profile,image:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
           </label>
           <div style={{display:'flex', justifyContent:'space-between', marginTop:'10px'}}>
-            <button onClick={() => setCurrentScreen('home')} style={{padding:'10px 16px', borderRadius:'12px'}}>Cancelar</button>
-            <button onClick={() => saveProfile(profile)} style={{padding:'10px 16px', borderRadius:'12px', background:'green', color:'#fff'}}>Guardar</button>
+            <button onClick={()=>setCurrentScreen('home')} style={{padding:'10px 16px', borderRadius:'12px'}}>Cancelar</button>
+            <button onClick={()=>saveProfile(profile)} style={{padding:'10px 16px', borderRadius:'12px', background:'green', color:'#fff'}}>Guardar</button>
           </div>
         </div>
       )}
     </div>
   );
-    }
+                       }
