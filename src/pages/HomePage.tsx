@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import SwipeCard from "../components/SwipeCard";
 import SwipeButtons from "../components/SwipeButtons";
 
-// Perfil de prueba
+// Perfiles de prueba
 const demoProfiles = [
   {
     id: 1,
@@ -31,12 +31,13 @@ const HomePage: React.FC = () => {
   const [profiles, setProfiles] = useState(demoProfiles);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [swipesLeft, setSwipesLeft] = useState(10); // 10 swipes gratis diarios
-  const [wldBalance, setWldBalance] = useState(0); // WLD premium
+  const [wldBalance, setWldBalance] = useState(0);   // WLD premium
 
   useEffect(() => {
-    // Podrías cargar perfiles desde el backend aquí
+    // Aquí podrías cargar perfiles reales desde el backend si quieres
   }, []);
 
+  // Función que maneja todas las acciones
   const handleAction = (type: string, cost: number = 0) => {
     if (swipesLeft <= 0 && cost === 0) {
       alert("Has usado tus 10 swipes gratis diarios.");
@@ -47,14 +48,14 @@ const HomePage: React.FC = () => {
       return;
     }
 
-    // Actualiza contadores
+    // Actualiza los contadores
     if (cost === 0) {
       setSwipesLeft(swipesLeft - 1);
     } else {
       setWldBalance(wldBalance - cost);
     }
 
-    // Pasa al siguiente perfil
+    // Avanza al siguiente perfil
     if (currentIndex < profiles.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
@@ -78,15 +79,7 @@ const HomePage: React.FC = () => {
       )}
 
       <div className="buttons-container">
-        <SwipeButtons
-          onLike={() => handleAction("LIKE")}
-          onDislike={() => handleAction("DISLIKE")}
-          onSuperLike={() => handleAction("SUPERLIKE", 1)}
-          onBoost={() => handleAction("BOOST", 1)}
-          onGold={() => handleAction("GOLD", 10)}
-          onPlatinum={() => handleAction("PLATINUM", 25)}
-          onDiamond={() => handleAction("DIAMOND", 40)}
-        />
+        <SwipeButtons onAction={(type, cost) => handleAction(type, cost)} />
       </div>
     </div>
   );
