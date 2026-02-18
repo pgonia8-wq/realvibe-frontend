@@ -1,21 +1,56 @@
-import React, { useState } from "react";
+// src/pages/HomePage.tsx
+import React, { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 import SwipeCard from "../components/SwipeCard";
 import SwipeButtons from "../components/SwipeButtons";
 
-// Perfiles demo
-const demoProfiles = [
-  { id: 1, name: "Alex", age: 25, bio: "Aventurero y amante de la música.", photoUrl: "https://placekitten.com/300/300" },
-  { id: 2, name: "Maria", age: 23, bio: "Fan del cine y los viajes.", photoUrl: "https://placekitten.com/301/300" },
-  { id: 3, name: "Juan", age: 28, bio: "Apasionado por la tecnología.", photoUrl: "https://placekitten.com/302/300" },
-];
+// 🔹 Pega aquí tu URL y anon key de Supabase
+const SUPABASE_URL = "https://TU_SUPABASE_URL.supabase.co";
+const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const USER_ID = "11111111-1111-1111-1111-111111111111";
+
+interface Profile {
+  id: string;
+  name: string;
+  bio: string;
+  photo_url: string;
+}
 
 const HomePage: React.FC = () => {
-  const [profiles, setProfiles] = useState(demoProfiles);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [swipesLeft, setSwipesLeft] = useState(10); // 10 swipes gratis diarios
-  const [wldBalance, setWldBalance] = useState(0);  // WLD premium
+  const [swipesLeft, setSwipesLeft] = useState(10);
+  const [wldBalance, setWldBalance] = useState(0);
 
-  const handleAction = (type: string, cost: number = 0) => {
+  useEffect(() => {
+    const loadData = async () => {
+      // Cargar usuario
+      const { data: userData } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", USER_ID)
+        .single();
+
+      if (userData) {
+        setSwipesLeft(userData.swipes_left);
+        setWldBalance(userData.wld_balance);
+        setCurrentIndex(userData.current_index);
+      }
+
+      // Cargar perfiles
+      const { data: profileData } = await supabase
+        .from("profile")
+        .select("*");
+
+      if (profileData) setProfiles(profileData);
+    };
+
+    loadData();
+  }, []);
+
+  const handleAction = async (type: string, cost: number = 0) => {
     if (swipesLeft <= 0 && cost === 0) {
       alert("Has usado tus 10 swipes gratis diarios.");
       return;
@@ -25,13 +60,29 @@ const HomePage: React.FC = () => {
       return;
     }
 
-    // Actualiza contadores
-    if (cost === 0) setSwipesLeft(swipesLeft - 1);
-    else setWldBalance(wldBalance - cost);
+    let newSwipes = swipesLeft;
+    let newWld = wldBalance;
 
-    // Siguiente perfil
-    if (currentIndex < profiles.length - 1) setCurrentIndex(currentIndex + 1);
+    if (cost === 0) {
+      newSwipes -= 1;
+      setSwipesLeft(newSwipes);
+    } else {
+      newWld -= cost;
+      setWldBalance(newWld);
+    }
+
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < profiles.length) setCurrentIndex(nextIndex);
     else alert("¡Has llegado al último perfil por ahora!");
+
+    await supabase
+      .from("users")
+      .update({
+        swipes_left: newSwipes,
+        wld_balance: newWld,
+        current_index: nextIndex
+      })
+      .eq("id", USER_ID);
   };
 
   const currentProfile = profiles[currentIndex];
@@ -43,9 +94,41 @@ const HomePage: React.FC = () => {
         Swipes gratis: {swipesLeft} | WLD: {wldBalance}
       </div>
 
-      {currentProfile ? <SwipeCard profile={currentProfile} /> : <p>No hay perfiles disponibles.</p>}
+      {currentProfile ? (
+        <SwipeCard
+          username={currentProfile.name}
+          bio={currentProfile.bio}
+          photoUrl={currentProfile.photo_url}
+        />
+      ) : (
+        <p>No hay perfiles disponibles.</p>
+      )}
 
-      <SwipeButtons onAction={(type, cost) => handleAction(type, cost)} />
+      <div className="buttons-container">
+        <SwipeButtons
+          onAction={(type: string) => {
+            switch(type) {
+              case "LIKE":
+              case "DISLIKE":
+                handleAction(type, 0);
+                break;
+              case "SUPERLIKE":
+              case "BOOST":
+                handleAction(type, 1);
+                break;
+              case "GOLD":
+                handleAction(type, 10);
+                break;
+              case "PLATINUM":
+                handleAction(type, 25);
+                break;
+              case "DIAMOND":
+                handleAction(type, 40);
+                break;
+            }
+          }}
+        />
+      </div>
     </div>
   );
 };
