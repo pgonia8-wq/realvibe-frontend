@@ -1,102 +1,94 @@
-import React from "react";
-import { motion } from "framer-motion";
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function App() {
-  const handleLike = () => alert("Like!");
-  const handleDislike = () => alert("Dislike!");
-  const handleSuper = () => alert("Super!");
-  const handlePremium = (tier: string) => alert(`${tier} clicked!`);
+  const [toast, setToast] = useState<{ message: string; icon: string; color: string } | null>(null);
+
+  const showToast = (message: string, icon: string, color: string) => {
+    setToast({ message, icon, color });
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleLike = () => showToast("Like enviado!", "💖", "#ff69b4");
+  const handleDislike = () => showToast("Dislike enviado!", "❌", "#a3a3a3");
+  const handleSuper = () => showToast("Super enviado!", "⚡", "#00bfff");
+  const handlePremium = (tier: string) => showToast(`${tier} comprado!`, "💎", "#ffd700");
 
   const styles = {
     app: {
-      minHeight: "100vh",
+      height: "100vh",
       background: "linear-gradient(180deg, #5e1a2b 0%, #2b0a14 100%)",
       display: "flex",
       flexDirection: "column" as const,
       alignItems: "center" as const,
-      padding: "20px",
+      justifyContent: "space-between" as const,
+      padding: "10px",
       color: "#fff",
       fontFamily: "'Plus Jakarta Sans', sans-serif",
+      overflow: "hidden" as const,
     },
     card: {
       width: "90%",
       maxWidth: "380px",
+      height: "55vh",
       background: "#fff",
       borderRadius: "25px",
       boxShadow: "0 15px 40px rgba(0,0,0,0.3)",
       overflow: "hidden",
-      marginTop: "20px",
       cursor: "grab",
+      display: "flex",
+      flexDirection: "column" as const,
     },
     image: {
       width: "100%",
-      height: "320px",
+      height: "75%",
       objectFit: "cover" as const,
     },
     cardContent: {
-      padding: "20px",
+      padding: "10px 15px",
       textAlign: "center" as const,
       color: "#333",
-    },
-    cardTitle: { fontSize: "1.5rem", fontWeight: 700, margin: "10px 0" },
-    cardText: { fontSize: "0.95rem", margin: "10px 0" },
-    buttonsContainer: {
+      flex: 1,
       display: "flex",
-      justifyContent: "center",
-      gap: "12px",
-      flexWrap: "wrap" as const,
-      marginTop: "20px",
+      flexDirection: "column" as const,
+      justifyContent: "center" as const,
     },
-    button: {
-      cursor: "pointer",
+    buttonsContainer: { display: "flex", justifyContent: "center", gap: "10px", flexWrap: "wrap" as const },
+    button: { cursor: "pointer", fontWeight: 600, border: "none", padding: "8px 14px", borderRadius: "12px", transition: "transform 0.15s, box-shadow 0.15s" },
+    premiumContainer: { display: "flex", flexWrap: "wrap" as const, justifyContent: "center", gap: "10px" },
+    toast: {
+      position: "fixed" as const,
+      bottom: "30px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      padding: "12px 20px",
+      borderRadius: "25px",
+      boxShadow: "0 5px 20px rgba(0,0,0,0.4)",
       fontWeight: 600,
-      border: "none",
-      padding: "10px 16px",
-      borderRadius: "12px",
-      transition: "transform 0.15s, box-shadow 0.15s",
-    },
-    like: { background: "linear-gradient(90deg,#ff69b4,#8a2be2)", color: "#fff" },
-    dislike: { background: "linear-gradient(90deg,#a3a3a3,#6b6b6b)", color: "#fff" },
-    superlike: { background: "linear-gradient(90deg,#00bfff,#1e90ff)", color: "#fff" },
-    premiumContainer: {
       display: "flex",
-      flexWrap: "wrap" as const,
-      justifyContent: "center",
-      gap: "12px",
-      marginTop: "25px",
-    },
-    premiumButton: {
-      cursor: "pointer",
-      fontWeight: 600,
-      border: "none",
-      padding: "10px 16px",
-      borderRadius: "12px",
+      alignItems: "center" as const,
+      gap: "10px",
       color: "#fff",
-      transition: "transform 0.15s, box-shadow 0.15s",
+      zIndex: 9999,
+      backdropFilter: "blur(5px)",
     },
-    boost: { background: "linear-gradient(90deg,#ff8c00,#ffa500)" },
-    gold: { background: "linear-gradient(90deg,#ffd700,#ffb700)" },
-    platinum: { background: "linear-gradient(90deg,#e5e4e2,#c0c0c0)", color: "#333" },
-    diamond: { background: "linear-gradient(90deg,#b9f2ff,#00ced1)", color: "#333" },
+    toastIcon: {
+      fontSize: "1.4rem",
+    },
   };
 
   return (
     <div style={styles.app}>
-      <h1>RealVibe 3.0</h1>
-      <p>Swipes gratis: 9 | WLD: 0</p>
+      <div style={{ textAlign: "center" }}>
+        <h1>RealVibe 3.0</h1>
+        <p>Swipes gratis: 9 | WLD: 0</p>
+      </div>
 
       <motion.div
         style={styles.card}
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
         whileTap={{ cursor: "grabbing" }}
-        onDragEnd={(event, info) => {
-          if (info.offset.x > 120) handleLike();
-          else if (info.offset.x < -120) handleDislike();
-        }}
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.3 }}
       >
         <motion.img
           style={styles.image}
@@ -105,58 +97,53 @@ export default function App() {
           whileHover={{ scale: 1.03 }}
         />
         <div style={styles.cardContent}>
-          <h2 style={styles.cardTitle}>Demo Profile</h2>
-          <p style={styles.cardText}>
-            Esta es una tarjeta de ejemplo mientras conectamos backend.
-          </p>
+          <h2>Demo Profile</h2>
+          <p>Esta es una tarjeta de ejemplo mientras conectamos backend.</p>
         </div>
       </motion.div>
 
       <div style={styles.buttonsContainer}>
-        <button
-          style={{ ...styles.button, ...styles.dislike }}
-          onClick={handleDislike}
-        >
+        <button style={{ ...styles.button, background: "#a3a3a3", color: "#fff" }} onClick={handleDislike}>
           Dislike
         </button>
-        <button style={{ ...styles.button, ...styles.like }} onClick={handleLike}>
+        <button style={{ ...styles.button, background: "#ff69b4", color: "#fff" }} onClick={handleLike}>
           Like
         </button>
-        <button
-          style={{ ...styles.button, ...styles.superlike }}
-          onClick={handleSuper}
-        >
+        <button style={{ ...styles.button, background: "#00bfff", color: "#fff" }} onClick={handleSuper}>
           Super
         </button>
       </div>
 
-      <h2 style={{ marginTop: "30px" }}>Funciones Premium</h2>
       <div style={styles.premiumContainer}>
-        <button
-          style={{ ...styles.premiumButton, ...styles.boost }}
-          onClick={() => handlePremium("Boost 1 WLD")}
-        >
+        <button style={{ ...styles.button, background: "#ff8c00" }} onClick={() => handlePremium("Boost 1 WLD")}>
           Boost 1 WLD
         </button>
-        <button
-          style={{ ...styles.premiumButton, ...styles.gold }}
-          onClick={() => handlePremium("Gold 10 WLD")}
-        >
+        <button style={{ ...styles.button, background: "#ffd700" }} onClick={() => handlePremium("Gold 10 WLD")}>
           Gold 10 WLD
         </button>
-        <button
-          style={{ ...styles.premiumButton, ...styles.platinum }}
-          onClick={() => handlePremium("Platinum 25 WLD")}
-        >
+        <button style={{ ...styles.button, background: "#e5e4e2", color: "#333" }} onClick={() => handlePremium("Platinum 25 WLD")}>
           Platinum 25 WLD
         </button>
-        <button
-          style={{ ...styles.premiumButton, ...styles.diamond }}
-          onClick={() => handlePremium("Diamond 40 WLD")}
-        >
+        <button style={{ ...styles.button, background: "#b9f2ff", color: "#333" }} onClick={() => handlePremium("Diamond 40 WLD")}>
           Diamond 40 WLD
         </button>
       </div>
+
+      {/* Toast animado tipo Tinder */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            style={{ ...styles.toast, background: toast.color }}
+            initial={{ opacity: 0, y: 50, scale: 0.5 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.5 }}
+            transition={{ type: "spring", stiffness: 500, damping: 25 }}
+          >
+            <span style={styles.toastIcon}>{toast.icon}</span>
+            <span>{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
