@@ -1,43 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import SwipeCard from "../components/SwipeCard";
 import SwipeButtons from "../components/SwipeButtons";
 
-// Perfiles de prueba
+// Perfiles demo
 const demoProfiles = [
-  {
-    id: 1,
-    name: "Alex",
-    age: 25,
-    bio: "Aventurero y amante de la música.",
-    photoUrl: "https://placekitten.com/300/300",
-  },
-  {
-    id: 2,
-    name: "Maria",
-    age: 23,
-    bio: "Fan del cine y los viajes.",
-    photoUrl: "https://placekitten.com/301/300",
-  },
-  {
-    id: 3,
-    name: "Juan",
-    age: 28,
-    bio: "Apasionado por la tecnología.",
-    photoUrl: "https://placekitten.com/302/300",
-  },
+  { id: 1, name: "Alex", age: 25, bio: "Aventurero y amante de la música.", photoUrl: "https://placekitten.com/300/300" },
+  { id: 2, name: "Maria", age: 23, bio: "Fan del cine y los viajes.", photoUrl: "https://placekitten.com/301/300" },
+  { id: 3, name: "Juan", age: 28, bio: "Apasionado por la tecnología.", photoUrl: "https://placekitten.com/302/300" },
 ];
 
 const HomePage: React.FC = () => {
   const [profiles, setProfiles] = useState(demoProfiles);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [swipesLeft, setSwipesLeft] = useState(10); // 10 swipes gratis diarios
-  const [wldBalance, setWldBalance] = useState(0);   // WLD premium
+  const [wldBalance, setWldBalance] = useState(0);  // WLD premium
 
-  useEffect(() => {
-    // Aquí podrías cargar perfiles reales desde el backend si quieres
-  }, []);
-
-  // Función que maneja todas las acciones
   const handleAction = (type: string, cost: number = 0) => {
     if (swipesLeft <= 0 && cost === 0) {
       alert("Has usado tus 10 swipes gratis diarios.");
@@ -48,19 +25,13 @@ const HomePage: React.FC = () => {
       return;
     }
 
-    // Actualiza los contadores
-    if (cost === 0) {
-      setSwipesLeft(swipesLeft - 1);
-    } else {
-      setWldBalance(wldBalance - cost);
-    }
+    // Actualiza contadores
+    if (cost === 0) setSwipesLeft(swipesLeft - 1);
+    else setWldBalance(wldBalance - cost);
 
-    // Avanza al siguiente perfil
-    if (currentIndex < profiles.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    } else {
-      alert("¡Has llegado al último perfil por ahora!");
-    }
+    // Siguiente perfil
+    if (currentIndex < profiles.length - 1) setCurrentIndex(currentIndex + 1);
+    else alert("¡Has llegado al último perfil por ahora!");
   };
 
   const currentProfile = profiles[currentIndex];
@@ -72,15 +43,9 @@ const HomePage: React.FC = () => {
         Swipes gratis: {swipesLeft} | WLD: {wldBalance}
       </div>
 
-      {currentProfile ? (
-        <SwipeCard profile={currentProfile} />
-      ) : (
-        <p>No hay perfiles disponibles.</p>
-      )}
+      {currentProfile ? <SwipeCard profile={currentProfile} /> : <p>No hay perfiles disponibles.</p>}
 
-      <div className="buttons-container">
-        <SwipeButtons onAction={(type, cost) => handleAction(type, cost)} />
-      </div>
+      <SwipeButtons onAction={(type, cost) => handleAction(type, cost)} />
     </div>
   );
 };
