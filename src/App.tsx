@@ -6,6 +6,13 @@ const TREASURY_WALLET = '0xTU_DIRECCION_WALLET_AQUI';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
 
+type Message = {
+  id: number;
+  text: string;
+  sender: 'me' | 'other';
+  time: string;
+};
+
 export default function App() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -15,8 +22,13 @@ export default function App() {
   const [freeSwipesLeft, setFreeSwipesLeft] = useState(MAX_FREE_SWIPES_PER_DAY);
   const [lastSwipeDate, setLastSwipeDate] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
+  const [chatInput, setChatInput] = useState('');
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 1, text: 'Hola! ¿Cómo estás?', sender: 'other', time: '02:45' },
+    { id: 2, text: 'Bien, y tú?', sender: 'me', time: '02:46' },
+  ]);
 
-  // Cargar estado de swipes desde localStorage
+  // Cargar swipes desde localStorage
   useEffect(() => {
     const storedDate = localStorage.getItem('lastSwipeDate');
     const storedSwipes = localStorage.getItem('freeSwipesLeft');
@@ -122,17 +134,118 @@ export default function App() {
     showToast(`¡${action.toUpperCase()} enviado!`);
   };
 
+  const sendMessage = () => {
+    if (!chatInput.trim()) return;
+
+    const newMsg: Message = {
+      id: messages.length + 1,
+      text: chatInput,
+      sender: 'me',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages([...messages, newMsg]);
+    setChatInput('');
+
+    // Simular respuesta del otro (opcional, para testing)
+    setTimeout(() => {
+      const reply: Message = {
+        id: messages.length + 2,
+        text: '¡Genial! ¿Y tú qué tal?',
+        sender: 'other',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, reply]);
+    }, 1500);
+  };
+
   if (currentScreen === 'chat') {
     return (
-      <div style={{ backgroundColor: '#6C1A36', minHeight: '100vh', color: '#fff', padding: '20px' }}>
-        <h2>Chat</h2>
-        <p>Chat en desarrollo. Próximamente mensajes realtime.</p>
-        <button 
-          onClick={() => setCurrentScreen('home')}
-          style={{ marginTop: '20px', padding: '12px 24px', background: 'pink', borderRadius: '50px', border: 'none', color: '#000' }}
-        >
-          Volver
-        </button>
+      <div style={{ 
+        backgroundColor: '#6C1A36', 
+        minHeight: '100vh', 
+        color: '#fff', 
+        display: 'flex', 
+        flexDirection: 'column',
+        padding: '15px',
+        boxSizing: 'border-box'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <button 
+            onClick={() => setCurrentScreen('home')}
+            style={{ background: 'transparent', color: '#fff', fontSize: '1.5rem', border: 'none' }}
+          >
+            ← Volver
+          </button>
+          <h2 style={{ margin: 0 }}>Chat con José</h2>
+        </div>
+
+        <div style={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          padding: '10px', 
+          background: 'rgba(255,255,255,0.05)', 
+          borderRadius: '16px',
+          marginBottom: '15px'
+        }}>
+          {messages.map(msg => (
+            <div 
+              key={msg.id}
+              style={{
+                marginBottom: '12px',
+                display: 'flex',
+                justifyContent: msg.sender === 'me' ? 'flex-end' : 'flex-start'
+              }}
+            >
+              <div style={{
+                maxWidth: '70%',
+                padding: '12px 16px',
+                borderRadius: '20px',
+                background: msg.sender === 'me' ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : '#444',
+                color: '#fff',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+              }}>
+                {msg.text}
+                <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px', textAlign: 'right' }}>
+                  {msg.time}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <input
+            type="text"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            placeholder="Escribe un mensaje..."
+            style={{
+              flex: 1,
+              padding: '14px',
+              borderRadius: '50px',
+              border: 'none',
+              background: 'rgba(255,255,255,0.1)',
+              color: '#fff',
+              fontSize: '1rem'
+            }}
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+          />
+          <button
+            onClick={sendMessage}
+            style={{
+              padding: '14px 24px',
+              background: 'linear-gradient(90deg, #ff69b4, #8a2be2)',
+              borderRadius: '50px',
+              border: 'none',
+              color: '#fff',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            Enviar
+          </button>
+        </div>
       </div>
     );
   }
@@ -207,7 +320,7 @@ export default function App() {
         </div>
       ) : (
         <>
-          {/* Botones de pago - más pequeños y con degradados */}
+          {/* Botones de pago - pequeños y con degradados */}
           <div style={{
             margin: '20px 0',
             display: 'grid',
@@ -229,8 +342,7 @@ export default function App() {
                 border: 'none',
                 fontWeight: 'bold',
                 cursor: boostActive ? 'not-allowed' : 'pointer',
-                boxShadow: '0 3px 10px rgba(255,140,0,0.3)',
-                transition: 'all 0.2s'
+                boxShadow: '0 3px 10px rgba(255,140,0,0.3)'
               }}
             >
               🔥 Boost 1 WLD
@@ -248,8 +360,7 @@ export default function App() {
                 border: 'none',
                 fontWeight: 'bold',
                 cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 3px 10px rgba(184,134,11,0.4)',
-                transition: 'all 0.2s'
+                boxShadow: '0 3px 10px rgba(184,134,11,0.4)'
               }}
             >
               ⭐ Gold 10 WLD
@@ -267,8 +378,7 @@ export default function App() {
                 border: 'none',
                 fontWeight: 'bold',
                 cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 3px 10px rgba(169,169,169,0.4)',
-                transition: 'all 0.2s'
+                boxShadow: '0 3px 10px rgba(169,169,169,0.4)'
               }}
             >
               🏆 Platinum 25 WLD
@@ -286,21 +396,20 @@ export default function App() {
                 border: 'none',
                 fontWeight: 'bold',
                 cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 3px 10px rgba(123,31,162,0.4)',
-                transition: 'all 0.2s'
+                boxShadow: '0 3px 10px rgba(123,31,162,0.4)'
               }}
             >
               💎 Diamond 40 WLD
             </button>
           </div>
 
-          {/* Tarjeta perfil - más grande para la foto */}
+          {/* Tarjeta perfil - grande */}
           <div style={{
             background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
             borderRadius: '24px',
             padding: '20px',
             margin: '0 auto 30px auto',
-            maxWidth: '420px',  // más ancho
+            maxWidth: '420px',
             boxShadow: '0 12px 35px rgba(0,0,0,0.5)',
             textAlign: 'center'
           }}>
@@ -308,7 +417,7 @@ export default function App() {
               <img 
                 src="https://placekitten.com/450/600" 
                 alt="Perfil" 
-                style={{ width: '100%', height: 'auto', display: 'block' }}  // imagen más grande
+                style={{ width: '100%', height: 'auto', display: 'block' }}
               />
             </div>
             <h2 style={{ margin: '12px 0', fontSize: '1.7rem' }}>José</h2>
