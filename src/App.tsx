@@ -1,16 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
+import { createClient } from '@supabase/supabase-js';
 
-// Cambia esto por tu wallet de prueba donde recibirás los pagos
-const TREASURY_WALLET = '0xTU_DIRECCION_WALLET_AQUI';
+// === CONFIGURACIÓN SUPABASE (ya con tus datos reales) ===
+const SUPABASE_URL = 'https://bogcdpwnnjxfgfdcewif.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvZ2NkcHdubmp4ZmdmZGNld2lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyOTM2MjgsImV4cCI6MjA4Njg2OTYyOH0.65pFiqgEmjogf73mZCG-yT2BZqx6Q8cbA_Ce9RhnIhQ';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Tu wallet real (la que te da MiniKit al conectar)
+const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b'; // tu wallet address
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
+const TEST_MATCH_ID = 'test-chat-001'; // ID fijo para pruebas (cámbialo cuando tengas matches reales)
 
 type Message = {
-  id: number;
+  id: string;
   text: string;
+  sender_id: string;
+  created_at: string;
   sender: 'me' | 'other';
-  time: string;
 };
 
 export default function App() {
@@ -26,37 +34,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar mensajes desde localStorage al abrir el chat
-  useEffect(() => {
-    if (currentScreen === 'chat') {
-      const storedMessages = localStorage.getItem('chatMessages');
-      if (storedMessages) {
-        setMessages(JSON.parse(storedMessages));
-      } else {
-        // Mensajes de ejemplo iniciales
-        const initial = [
-          { id: 1, text: 'Hola! ¿Cómo estás?', sender: 'other', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-          { id: 2, text: 'Bien, y tú?', sender: 'me', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-        ];
-        setMessages(initial);
-        localStorage.setItem('chatMessages', JSON.stringify(initial));
-      }
-    }
-  }, [currentScreen]);
-
-  // Guardar mensajes cada vez que cambien
-  useEffect(() => {
-    if (messages.length > 0) {
-      localStorage.setItem('chatMessages', JSON.stringify(messages));
-    }
-  }, [messages]);
-
-  // Scroll automático al último mensaje
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Cargar estado de swipes gratis desde localStorage
+  // Cargar swipes gratis desde localStorage
   useEffect(() => {
     const storedDate = localStorage.getItem('lastSwipeDate');
     const storedSwipes = localStorage.getItem('freeSwipesLeft');
@@ -79,6 +57,60 @@ export default function App() {
       setLastSwipeDate(today);
     }
   }, []);
+
+  // Realtime chat con Supabase
+  useEffect(() => {
+    if (currentScreen !== 'chat' || !walletAddress) return;
+
+    // Cargar mensajes iniciales
+    const loadMessages = async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('match_id', TEST_MATCH_ID)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error cargando mensajes:', error);
+        showToast('Error al cargar chat', 'error');
+        return;
+      }
+
+      const mapped = data.map(msg => ({
+        ...msg,
+        sender: msg.sender_id === walletAddress ? 'me' : 'other'
+      }));
+      setMessages(mapped);
+    };
+
+    loadMessages();
+
+    // Suscripción realtime
+    const channel = supabase
+      .channel(`messages:${TEST_MATCH_ID}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${TEST_MATCH_ID}` },
+        (payload) => {
+          const newMsg = payload.new as Message;
+          const mappedMsg = {
+            ...newMsg,
+            sender: newMsg.sender_id === walletAddress ? 'me' : 'other'
+          };
+          setMessages(prev => [...prev, mappedMsg]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentScreen, walletAddress]);
+
+  // Scroll automático al final
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
@@ -162,30 +194,24 @@ export default function App() {
     showToast(`¡${action.toUpperCase()} enviado!`);
   };
 
-  const sendMessage = () => {
-    if (!chatInput.trim()) return;
+  const sendMessage = async () => {
+    if (!chatInput.trim() || !walletAddress) return;
 
-    const newMsg: Message = {
-      id: messages.length + 1,
+    const newMsg = {
+      match_id: TEST_MATCH_ID,
+      sender_id: walletAddress,
       text: chatInput.trim(),
-      sender: 'me',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages([...messages, newMsg]);
-    setChatInput('');
+    const { error } = await supabase.from('messages').insert(newMsg);
 
-    // Simular respuesta automática del otro usuario (para testing)
-    setTimeout(() => {
-      const replies = ['¡Genial! 😊', 'Jajaja qué bueno', 'Me encanta eso', 'Cuéntame más', 'Totalmente de acuerdo', 'Qué interesante 🤔'];
-      const reply: Message = {
-        id: messages.length + 2,
-        text: replies[Math.floor(Math.random() * replies.length)],
-        sender: 'other',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, reply]);
-    }, 1000 + Math.random() * 1500);
+    if (error) {
+      console.error('Error al enviar:', error);
+      showToast('Error al enviar mensaje', 'error');
+      return;
+    }
+
+    setChatInput('');
   };
 
   if (currentScreen === 'chat') {
@@ -267,7 +293,7 @@ export default function App() {
                   marginTop: '6px', 
                   textAlign: msg.sender === 'me' ? 'right' : 'left' 
                 }}>
-                  {msg.time}
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>
@@ -529,25 +555,7 @@ export default function App() {
         </>
       )}
 
-      {/* Botón Chat flotante */}
       <button 
         onClick={() => setCurrentScreen('chat')}
         style={{
-          position: 'fixed',
-          bottom: '25px',
-          right: '25px',
-          background: 'linear-gradient(45deg, pink, #ff69b4)',
-          color: '#000',
-          padding: '16px 24px',
-          borderRadius: '50px',
-          fontWeight: 'bold',
-          border: 'none',
-          boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
-          zIndex: 1000
-        }}
-      >
-        Chat
-      </button>
-    </div>
-  );
-}
+      
