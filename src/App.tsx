@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
+// Perfil de tarjeta
 type Profile = {
   name: string;
   description: string;
@@ -9,108 +10,132 @@ type Profile = {
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<'home' | 'profileEdit'>('home');
   const [swipeIndex, setSwipeIndex] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
+
   const [profile, setProfile] = useState<Profile>({
     name: 'Demo Profile',
     description: 'Amante de la música y los viajes',
     image: 'https://picsum.photos/400/400',
   });
 
-  // Lista de perfiles para swipe (puedes conectar backend luego)
-  const cards = [
+  const cards: Profile[] = [
     { name: 'Alex', description: 'Aventurero y divertido', image: 'https://placekitten.com/400/400' },
     { name: 'José', description: 'Amante de la música', image: 'https://placekitten.com/401/400' },
     { name: 'Josesito', description: 'Fan del cine', image: 'https://placekitten.com/402/400' },
   ];
 
-  // Cargar perfil de localStorage
+  // Cargar perfil guardado
   useEffect(() => {
     const storedProfile = localStorage.getItem('userProfile');
     if (storedProfile) setProfile(JSON.parse(storedProfile));
   }, []);
 
-  // Guardar perfil en localStorage
+  // Guardar perfil
   const saveProfile = (newProfile: Profile) => {
     setProfile(newProfile);
     localStorage.setItem('userProfile', JSON.stringify(newProfile));
     setCurrentScreen('home');
   };
 
-  // Swipe simple
-  const handleSwipe = () => {
-    if (swipeIndex < cards.length - 1) setSwipeIndex(swipeIndex + 1);
-    else setSwipeIndex(0); // vuelve al inicio
+  // Swipe animado
+  const handleSwipe = (direction: 'left' | 'right') => {
+    if (isSwiping) return; // prevenir doble click
+    setSwipeDirection(direction);
+    setIsSwiping(true);
+    setTimeout(() => {
+      setSwipeIndex((prev) => (prev < cards.length - 1 ? prev + 1 : 0));
+      setIsSwiping(false);
+      setSwipeDirection(null);
+    }, 300); // duración animación
   };
 
   return (
     <div style={{
-      backgroundColor: '#4B001F',
-      minHeight: '100vh',
+      backgroundColor: '#6C1A36', // bordeux
+      minHeight:'100vh',
       fontFamily: "'Plus Jakarta Sans', sans-serif",
-      color: '#fff',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
+      color:'#fff',
+      display:'flex',
+      flexDirection:'column',
+      alignItems:'center',
       padding:'10px'
     }}>
       {currentScreen === 'home' && (
         <>
           {/* Header */}
-          <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-            <button onClick={() => alert('Salir de la app')} style={{
-              background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'
-            }}>←</button>
-            <h1>RealVibe 3.0</h1>
-            <button onClick={() => setCurrentScreen('profileEdit')} style={{
-              background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'
-            }}>⚙️</button>
+          <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+            <button onClick={() => alert('Salir de la app')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>←</button>
+            <h1 style={{margin:0}}>RealVibe 3.0</h1>
+            <button onClick={()=>setCurrentScreen('profileEdit')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>⚙️</button>
           </div>
 
-          <p>Swipes gratis: 9 | WLD: 0</p>
+          <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: 0</p>
 
-          {/* Tarjeta */}
+          {/* Tarjeta con swipe */}
           <div style={{
-            background:'#fff',
-            color:'#000',
-            borderRadius:'20px',
             width:'90%',
             maxWidth:'400px',
-            padding:'10px',
-            textAlign:'center',
-            marginTop:'10px'
+            minHeight:'480px',
+            position:'relative',
+            display:'flex',
+            justifyContent:'center',
+            alignItems:'center'
           }}>
-            <img 
-              src={cards[swipeIndex].image} 
-              alt="profile" 
-              style={{
-                width:'90%',
-                height:'300px',
-                borderRadius:'15px',
-                objectFit:'cover',
-                marginTop:'10px'
-              }}
-            />
-            <h2>{cards[swipeIndex].name}</h2>
-            <p>{cards[swipeIndex].description}</p>
-          </div>
+            {cards.slice(swipeIndex).map((card, idx) => {
+              const isTop = idx === 0;
+              return (
+                <div key={card.name} style={{
+                  background:'#fff',
+                  color:'#000',
+                  borderRadius:'20px',
+                  width:'100%',
+                  padding:'10px',
+                  position:isTop ? 'relative' : 'absolute',
+                  top:0,
+                  left:0,
+                  right:0,
+                  bottom:0,
+                  zIndex: cards.length - idx,
+                  textAlign:'center',
+                  transition:'transform 0.3s ease',
+                  transform: isTop
+                    ? swipeDirection === 'left'
+                      ? 'translateX(-150%) rotate(-15deg)'
+                      : swipeDirection === 'right'
+                      ? 'translateX(150%) rotate(15deg)'
+                      : 'translateX(0)'
+                    : 'scale(0.95)',
+                }}>
+                  <img 
+                    src={card.image || 'https://picsum.photos/400/400'} 
+                    alt={card.name} 
+                    style={{
+                      width:'90%',
+                      height:'300px',
+                      borderRadius:'15px',
+                      objectFit:'cover',
+                      margin:'10px auto',
+                    }}
+                  />
+                  <h2>{card.name}</h2>
+                  <p>{card.description}</p>
 
-          {/* Botones de swipe */}
-          <div style={{display:'flex', justifyContent:'center', gap:'10px', marginTop:'10px', flexWrap:'wrap'}}>
-            <button onClick={handleSwipe} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
-            <button onClick={handleSwipe} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
-            <button onClick={handleSwipe} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
-          </div>
-
-          {/* Funciones premium */}
-          <h2 style={{marginTop:'20px'}}>Funciones Premium</h2>
-          <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
-            <button style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>
-            <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
-            <button style={{background:'#C0C0C0', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
-            <button style={{background:'cyan', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
+                  {isTop && (
+                    <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
+                      <button onClick={()=>handleSwipe('left')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
+                      <button onClick={()=>handleSwipe('right')} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
+                      <button onClick={()=>handleSwipe('right')} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </>
       )}
 
+      {/* Pantalla de edición de perfil */}
       {currentScreen === 'profileEdit' && (
         <div style={{
           background:'#fff',
@@ -123,15 +148,15 @@ export default function App() {
           textAlign:'center'
         }}>
           <h2>Editar Perfil</h2>
-          <label>
+          <label style={{display:'block', margin:'5px 0'}}>
             Nombre:
             <input type="text" value={profile.name} onChange={(e)=>setProfile({...profile,name:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
           </label>
-          <label>
+          <label style={{display:'block', margin:'5px 0'}}>
             Descripción:
             <textarea value={profile.description} onChange={(e)=>setProfile({...profile,description:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
           </label>
-          <label>
+          <label style={{display:'block', margin:'5px 0'}}>
             URL de imagen:
             <input type="text" value={profile.image} onChange={(e)=>setProfile({...profile,image:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
           </label>
@@ -143,4 +168,4 @@ export default function App() {
       )}
     </div>
   );
-                       }
+}
