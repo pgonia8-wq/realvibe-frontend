@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 type Profile = {
   id: string;
   name: string;
   description: string;
-  image: string;
+  images: string[]; // hasta 3 fotos
   wld: number;
   subscriptionActive: boolean;
   boostActiveUntil?: string;
@@ -34,21 +34,21 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [currentMatchId, setCurrentMatchId] = useState<string>('');
-  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const [userProfile, setUserProfile] = useState<Profile>({
     id: 'pgonia.world.id',
     name: '@pgonia',
     description: 'Aquí puedes editar tu descripción',
-    image: '',
+    images: [],
     wld: 100,
     subscriptionActive: true
   });
 
   const cards: Profile[] = [
-    { id:'1', name: 'José', description: 'Amante de la música', image: '', wld:0, subscriptionActive:false },
-    { id:'2', name: 'Josesito', description: 'Fan del cine', image: '', wld:0, subscriptionActive:false },
-    { id:'3', name: 'Alex', description: 'Aventurero y divertido', image: '', wld:0, subscriptionActive:false },
+    { id:'1', name: 'José', description: 'Amante de la música', images: ['https://placekitten.com/400/400'], wld:0, subscriptionActive:false },
+    { id:'2', name: 'Josesito', description: 'Fan del cine', images: ['https://placekitten.com/401/400'], wld:0, subscriptionActive:false },
+    { id:'3', name: 'Alex', description: 'Aventurero y divertido', images: ['https://placekitten.com/402/400'], wld:0, subscriptionActive:false },
   ];
 
   useEffect(() => {
@@ -56,17 +56,30 @@ export default function App() {
     if (stored) setUserProfile(JSON.parse(stored));
   }, []);
 
-  useEffect(() => {
-    // Scroll automático hacia abajo en chat
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [chatMessages]);
-
   const saveProfile = (profile: Profile) => {
     setUserProfile(profile);
     localStorage.setItem('userProfile', JSON.stringify(profile));
     setCurrentScreen('home');
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files).slice(0, 3); // máximo 3 fotos
+    setUploading(true);
+    const uploadedUrls: string[] = [];
+
+    for (const file of files) {
+      const fileName = `${userProfile.id}_${Date.now()}_${file.name}`;
+      const { data, error } = await supabase.storage.from('user-photos').upload(fileName, file, { upsert: true });
+      if (error) console.error(error);
+      else {
+        const { publicUrl } = supabase.storage.from('user-photos').getPublicUrl(fileName);
+        uploadedUrls.push(publicUrl);
+      }
+    }
+
+    setUserProfile(prev => ({ ...prev, images: uploadedUrls }));
+    setUploading(false);
   };
 
   const registerAction = async (targetProfile: Profile, actionType: string) => {
@@ -108,7 +121,6 @@ export default function App() {
         const boostExpiry = new Date();
         boostExpiry.setHours(boostExpiry.getHours() + 24);
         setUserProfile(prev => ({ ...prev, boostActiveUntil: boostExpiry.toISOString() }));
-        await supabase.from('profiles').update({ boost_active_until: boostExpiry.toISOString() }).eq('id', userProfile.id);
       }
 
       registerAction(topCard, type);
@@ -120,16 +132,20 @@ export default function App() {
 
       alertText = type.toUpperCase();
 
-      if (type === 'super' || type === 'like') {
+      // Crear match si Like o Super
+      if (type === 'like' || type === 'super') {
         const { data: match } = await supabase
           .from('matches')
           .select('*')
           .or(`user1_id.eq.${userProfile.id},user2_id.eq.${topCard.id}`)
           .limit(1)
           .single();
+
         if (!match) {
           const { data: newMatch } = await supabase.from('matches').insert({ user1_id: userProfile.id, user2_id: topCard.id }).select().single();
           if (newMatch) setCurrentMatchId(newMatch.id);
+        } else {
+          setCurrentMatchId(match.id);
         }
       }
 
@@ -148,15 +164,16 @@ export default function App() {
   };
 
   const openChat = async () => {
-    if (!currentMatchId) {
-      setAlertColor('#ff4d4d');
-      setAlertMessage('No tienes Match para chat');
-      setTimeout(() => setAlertMessage(null), 1500);
-      return;
-    }
+    if (!currentMatchId) return;
     setCurrentScreen('chat');
+
     const { data } = await supabase.from('messages').select('*').eq('match_id', currentMatchId).order('sent_at', { ascending: true });
     if (data) setChatMessages(data);
+
+    // Suscripción en tiempo real
+    supabase.from(`messages:match_id=eq.${currentMatchId}`).on('INSERT', payload => {
+      setChatMessages(prev => [...prev, payload.new as Message]);
+    }).subscribe();
   };
 
   const sendMessage = async () => {
@@ -172,33 +189,19 @@ export default function App() {
     setChatInput('');
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${userProfile.id}.${fileExt}`;
-    const { data, error } = await supabase.storage.from('profile-images').upload(fileName, file, { upsert: true });
-    if (!error) {
-      const { publicUrl } = supabase.storage.from('profile-images').getPublicUrl(fileName);
-      setUserProfile(prev => ({ ...prev, image: publicUrl }));
-    }
-  };
-
   const boostActive = userProfile.boostActiveUntil ? new Date(userProfile.boostActiveUntil) > new Date() : false;
 
   return (
     <div style={{backgroundColor:'#6C1A36', minHeight:'100vh', fontFamily:"'Plus Jakarta Sans', sans-serif", color:'#fff', display:'flex', flexDirection:'column', alignItems:'center', padding:'10px', boxSizing:'border-box'}}>
       
-      <button onClick={openChat} style={{position:'fixed', bottom:'20px', right:'20px', background:'pink', color:'#000', padding:'12px 16px', borderRadius:'50px', zIndex:10000, fontWeight:'700', transition:'all 0.3s'}}>Chat</button>
+      <button onClick={openChat} style={{position:'fixed', bottom:'20px', right:'20px', background:'pink', color:'#000', padding:'12px 16px', borderRadius:'50px', zIndex:10000, fontWeight:'700'}}>Chat</button>
       
       {currentScreen === 'home' && (
         <>
           <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
             <button onClick={()=>alert('Salir de la app')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>←</button>
             <h1 style={{margin:0}}>RealVibe 3.0</h1>
-            <button onClick={()=>setCurrentScreen('profileEdit')} style={{background:'transparent', border:'none', cursor:'pointer', padding:'5px'}}>
-              <img src="https://cdn-icons-png.flaticon.com/512/565/565547.png" alt="Editar Perfil" style={{width:'32px', height:'32px'}} />
-            </button>
+            <button onClick={()=>setCurrentScreen('profileEdit')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>🧑‍💼</button>
           </div>
 
           <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: {userProfile.wld}</p>
@@ -207,7 +210,7 @@ export default function App() {
             {cards.slice(swipeIndex).map((card, idx) => {
               const isTop = idx === 0;
               return (
-                <div key={card.name} style={{
+                <div key={card.id} style={{
                   background: 'linear-gradient(90deg,#ff69b4,#8a2be2)',
                   color:'#000',
                   borderRadius:'20px',
@@ -231,12 +234,10 @@ export default function App() {
                   justifyContent:'space-between',
                   transition:'transform 0.3s ease'
                 }}>
-                  <div style={{padding:'5px', borderRadius:'20px'}}>
-                    <img 
-                      src={card.image || 'https://picsum.photos/400/400?random=2'} 
-                      alt={card.name} 
-                      style={{width:'100%', height:'300px', objectFit:'cover', borderRadius:'15px'}} 
-                    />
+                  <div style={{padding:'5px', borderRadius:'20px', display:'flex', gap:'5px'}}>
+                    {card.images.map((img, i) => (
+                      <img key={i} src={img} alt={card.name} style={{width:'30%', height:'100px', objectFit:'cover', borderRadius:'10px'}} />
+                    ))}
                   </div>
                   <div>
                     <h2>{card.name}</h2>
@@ -245,37 +246,19 @@ export default function App() {
 
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
-                      {['dislike','like','super'].map(type => (
-                        <button
-                          key={type}
-                          onClick={()=>handleSwipe(type==='dislike'?'left':'right', type as any)}
-                          style={{
-                            padding:'10px 16px',
-                            borderRadius:'12px',
-                            background: type==='dislike'?'#888': type==='like'?'linear-gradient(90deg,#ff69b4,#8a2be2)':'linear-gradient(90deg,#00bfff,#1e90ff)',
-                            color:'#fff',
-                            transition:'all 0.3s',
-                            cursor:'pointer'
-                          }}
-                          onMouseEnter={e=>e.currentTarget.style.transform='scale(1.1)'}
-                          onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
-                        >
-                          {type.charAt(0).toUpperCase()+type.slice(1)}
-                        </button>
-                      ))}
+                      <button onClick={()=>handleSwipe('left','dislike')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px', transition:'all 0.3s ease'}}>Dislike</button>
+                      <button onClick={()=>handleSwipe('right','like')} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px', transition:'all 0.3s ease'}}>Like</button>
+                      <button onClick={()=>handleSwipe('right','super')} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px', transition:'all 0.3s ease'}}>Super</button>
                     </div>
                   )}
 
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
-                      {['Boost 1 WLD','Gold 10 WLD','Platinum 25 WLD','Diamond 40 WLD'].map(btn => (
-                        <button key={btn} style={{background: btn.includes('Boost')?'orange':btn.includes('Gold')?'gold':btn.includes('Platinum')?'silver':'cyan', color:'#fff', padding:'10px 16px', borderRadius:'12px', transition:'all 0.3s', cursor:'pointer'}}
-                          onMouseEnter={e=>e.currentTarget.style.transform='scale(1.1)'}
-                          onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
-                        >
-                          {btn} {btn.includes('Boost') && boostActive && '(Activo 24h)'}
-                        </button>
-                      ))}
+                      {!boostActive && <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px', transition:'all 0.3s ease'}}>Boost 1 WLD</button>}
+                      {boostActive && <span style={{padding:'10px 16px', borderRadius:'12px', background:'orange'}}>Activo 24h</span>}
+                      <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px', transition:'all 0.3s ease'}}>Gold 10 WLD</button>
+                      <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px', transition:'all 0.3s ease'}}>Platinum 25 WLD</button>
+                      <button style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px', transition:'all 0.3s ease'}}>Diamond 40 WLD</button>
                     </div>
                   )}
                 </div>
@@ -299,7 +282,7 @@ export default function App() {
               zIndex:9999,
               boxShadow:'0 5px 20px rgba(0,0,0,0.3)',
               pointerEvents:'none',
-              transition:'all 0.3s'
+              transition:'all 0.3s ease'
             }}>
               {alertMessage}
             </div>
@@ -310,9 +293,10 @@ export default function App() {
       {currentScreen === 'chat' && (
         <div style={{width:'100%', maxWidth:'400px', flex:1, display:'flex', flexDirection:'column', gap:'5px'}}>
           <h2 style={{textAlign:'center'}}>Chat</h2>
-          <div ref={chatContainerRef} style={{flex:1, overflowY:'auto', border:'2px solid #ff69b4', borderRadius:'12px', padding:'10px', background:'#fff', color:'#000'}}>
-            {chatMessages.map((msg, idx) => (
-              <div key={msg.id} style={{textAlign: msg.sender_id === userProfile.id ? 'right' : 'left', transition:'all 0.3s', opacity:1, transform:'translateY(0)'}}>
+          <div style={{flex:1, overflowY:'auto', border:'2px solid #ff69b4', borderRadius:'12px', padding:'10px', background:'#fff', color:'#000'}}>
+            {chatMessages.length === 0 && <p>No tienes Match para chat</p>}
+            {chatMessages.map((msg) => (
+              <div key={msg.id} style={{textAlign: msg.sender_id === userProfile.id ? 'right' : 'left'}}>
                 <span style={{background: msg.sender_id === userProfile.id ? '#ff69b4' : '#00bfff', padding:'5px 10px', borderRadius:'12px', display:'inline-block', margin:'2px 0', color:'#fff'}}>
                   {msg.message}
                 </span>
@@ -339,10 +323,9 @@ export default function App() {
             <textarea value={userProfile.description} onChange={(e)=>setUserProfile({...userProfile,description:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
           </label>
           <label style={{display:'block', margin:'5px 0'}}>
-            Foto de perfil:
-            <input type="file" accept="image/*" onChange={handleFileUpload} style={{display:'block', marginTop:'5px'}}/>
+            Subir fotos (máx 3):
+            <input type="file" multiple accept="image/*" onChange={handleFileUpload} disabled={uploading} />
           </label>
-          {userProfile.image && <img src={userProfile.image} alt="Perfil" style={{width:'100px', height:'100px', borderRadius:'50%', marginTop:'10px', objectFit:'cover'}} />}
           <div style={{display:'flex', justifyContent:'space-between', marginTop:'10px'}}>
             <button onClick={()=>setCurrentScreen('home')} style={{padding:'10px 16px', borderRadius:'12px'}}>Cancelar</button>
             <button onClick={()=>saveProfile(userProfile)} style={{padding:'10px 16px', borderRadius:'12px', background:'green', color:'#fff'}}>Guardar</button>
@@ -350,5 +333,5 @@ export default function App() {
         </div>
       )}
     </div>
-  )
+  );
 }
