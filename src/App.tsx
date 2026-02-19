@@ -558,4 +558,5 @@ export default function App() {
       <button 
         onClick={() => setCurrentScreen('chat')}
         style={{
-      
+      </div>
+);
