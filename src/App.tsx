@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
-// === CONFIGURACIÓN SUPABASE (tus datos reales) ===
+// CONFIGURACIÓN SUPABASE (tus datos reales)
 const SUPABASE_URL = 'https://bogcdpwnnjxfgfdcewif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvZ2NkcHdubmp4ZmdmZGNld2lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyOTM2MjgsImV4cCI6MjA4Njg2OTYyOH0.65pFiqgEmjogf73mZCG-yT2BZqx6Q8cbA_Ce9RhnIhQ';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -10,7 +10,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
-const TEST_MATCH_ID = 'test-chat-001'; // ID fijo para pruebas (cámbialo cuando tengas matches)
 
 type Message = {
   id: string;
@@ -31,9 +30,10 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [matchId, setMatchId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar swipes gratis desde localStorage
+  // Cargar swipes gratis
   useEffect(() => {
     const storedDate = localStorage.getItem('lastSwipeDate');
     const storedSwipes = localStorage.getItem('freeSwipesLeft');
@@ -57,16 +57,44 @@ export default function App() {
     }
   }, []);
 
-  // Cargar mensajes desde Supabase + realtime
+  // Buscar match_id real al conectar wallet
   useEffect(() => {
-    if (currentScreen !== 'chat' || !walletAddress) return;
+    if (!walletAddress) return;
 
-    // Cargar mensajes iniciales (incluye tu mensaje manual)
+    const findMatch = async () => {
+      const { data, error } = await supabase
+        .from('matches')
+        .select('id')
+        .or(`user1_id.eq.\( {walletAddress},user2_id.eq. \){walletAddress}`)
+        .limit(1)
+        .single();
+
+      if (error) {
+        console.error('Error buscando match:', error);
+        showToast('No se encontró match. Crea uno primero', 'error');
+        return;
+      }
+
+      if (data) {
+        setMatchId(data.id.toString());
+        showToast('Match encontrado');
+      } else {
+        showToast('No tienes matches aún', 'error');
+      }
+    };
+
+    findMatch();
+  }, [walletAddress]);
+
+  // Realtime y carga de mensajes solo si hay match_id
+  useEffect(() => {
+    if (currentScreen !== 'chat' || !walletAddress || !matchId) return;
+
     const loadMessages = async () => {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('match_id', TEST_MATCH_ID)
+        .eq('match_id', matchId)
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -84,12 +112,11 @@ export default function App() {
 
     loadMessages();
 
-    // Suscripción realtime
     const channel = supabase
-      .channel(`messages:${TEST_MATCH_ID}`)
+      .channel(`messages:${matchId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${TEST_MATCH_ID}` },
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
         (payload) => {
           const newMsg = payload.new as Message;
           const mappedMsg = {
@@ -104,9 +131,9 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentScreen, walletAddress]);
+  }, [currentScreen, walletAddress, matchId]);
 
-  // Scroll automático al final
+  // Scroll automático
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -194,7 +221,10 @@ export default function App() {
   };
 
   const sendMessage = () => {
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || !walletAddress) {
+      showToast('Escribe algo primero', 'error');
+      return;
+    }
 
     const newMsg: Message = {
       id: messages.length + 1,
@@ -327,6 +357,7 @@ export default function App() {
     );
   }
 
+  // Resto de la app (home con swipe, pagos, etc.)
   return (
     <div style={{
       backgroundColor: '#6C1A36',
