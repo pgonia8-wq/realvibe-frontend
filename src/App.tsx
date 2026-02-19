@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 type Profile = {
+  id: string;
   name: string;
   description: string;
   image: string;
+  wld: number;
+  subscriptionActive: boolean;
 };
 
 const supabaseUrl = 'https://YOUR_PROJECT.supabase.co';
@@ -20,15 +23,18 @@ export default function App() {
   const [alertColor, setAlertColor] = useState<string>('');
 
   const [userProfile, setUserProfile] = useState<Profile>({
-    name: 'Mi Perfil',
+    id: 'pgonia.world.id',
+    name: '@pgonia',
     description: 'Aquí puedes editar tu descripción',
     image: 'https://picsum.photos/400/400?random=1',
+    wld: 100,
+    subscriptionActive: true
   });
 
   const cards: Profile[] = [
-    { name: 'José', description: 'Amante de la música', image: 'https://placekitten.com/400/400' },
-    { name: 'Josesito', description: 'Fan del cine', image: 'https://placekitten.com/401/400' },
-    { name: 'Alex', description: 'Aventurero y divertido', image: 'https://placekitten.com/402/400' },
+    { id:'1', name: 'José', description: 'Amante de la música', image: 'https://placekitten.com/400/400', wld:0, subscriptionActive:false },
+    { id:'2', name: 'Josesito', description: 'Fan del cine', image: 'https://placekitten.com/401/400', wld:0, subscriptionActive:false },
+    { id:'3', name: 'Alex', description: 'Aventurero y divertido', image: 'https://placekitten.com/402/400', wld:0, subscriptionActive:false },
   ];
 
   useEffect(() => {
@@ -42,55 +48,59 @@ export default function App() {
     setCurrentScreen('home');
   };
 
-  const registerAction = async (
-    targetProfile: Profile,
-    type: 'like' | 'dislike' | 'super' | 'boost' | 'gold' | 'platinum' | 'diamond'
-  ) => {
+  const registerAction = async (targetProfile: Profile, actionType: string) => {
     try {
       await supabase.from('actions').insert({
-        user: userProfile.name,
-        target_user: targetProfile.name,
-        action: type,
+        user_id: userProfile.id,
+        target_user_id: targetProfile.id,
+        action: actionType,
         timestamp: new Date()
       });
     } catch (err) {
-      console.error('Error guardando acción:', err);
+      console.error('Error registrando acción:', err);
     }
   };
 
-  const handleSwipe = (direction: 'left' | 'right', type: 'dislike' | 'like' | 'super') => {
+  const handleSwipe = (direction: 'left' | 'right', type: 'dislike' | 'like' | 'super' | 'boost') => {
     if (isSwiping) return;
     setSwipeDirection(direction);
     setIsSwiping(true);
 
     const topCard = cards[swipeIndex];
-    registerAction(topCard, type);
 
-    if (type === 'dislike') setAlertColor('#888');
-    if (type === 'like') setAlertColor('linear-gradient(90deg,#ff69b4,#8a2be2)');
-    if (type === 'super') setAlertColor('linear-gradient(90deg,#00bfff,#1e90ff)');
-    setAlertMessage(type.toUpperCase());
+    const isSuperUser = userProfile.id === 'pgonia.world.id';
+    let canPerform = true;
+    let alertText = '';
+
+    if (!isSuperUser) {
+      if ((type === 'boost' || type === 'super') && !userProfile.subscriptionActive && userProfile.wld < 1) {
+        canPerform = false;
+        alertText = 'No tienes WLD suficiente';
+      }
+    }
+
+    if (canPerform) {
+      if ((type === 'boost' || type === 'super') && !isSuperUser && !userProfile.subscriptionActive) {
+        setUserProfile(prev => ({ ...prev, wld: prev.wld - 1 }));
+      }
+      registerAction(topCard, type);
+      if (type === 'dislike') setAlertColor('#888');
+      if (type === 'like') setAlertColor('linear-gradient(90deg,#ff69b4,#8a2be2)');
+      if (type === 'super') setAlertColor('linear-gradient(90deg,#00bfff,#1e90ff)');
+      if (type === 'boost') setAlertColor('linear-gradient(90deg,#ff8c00,#ffa500)');
+      alertText = type.toUpperCase();
+    } else {
+      setAlertColor('#ff4d4d');
+    }
+
+    setAlertMessage(alertText);
 
     setTimeout(() => {
-      setSwipeIndex((prev) => (prev < cards.length - 1 ? prev + 1 : 0));
+      setSwipeIndex(prev => (prev < cards.length - 1 ? prev + 1 : 0));
       setSwipeDirection(null);
       setIsSwiping(false);
       setAlertMessage(null);
     }, 500);
-  };
-
-  const handlePremium = (type: 'boost' | 'gold' | 'platinum' | 'diamond') => {
-    const topCard = cards[swipeIndex];
-    registerAction(topCard, type);
-
-    setAlertColor(
-      type === 'boost' ? 'orange' :
-      type === 'gold' ? 'gold' :
-      type === 'platinum' ? 'silver' :
-      'cyan'
-    );
-    setAlertMessage(type.toUpperCase());
-    setTimeout(() => setAlertMessage(null), 500);
   };
 
   return (
@@ -113,7 +123,7 @@ export default function App() {
             <button onClick={()=>setCurrentScreen('profileEdit')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>⚙️</button>
           </div>
 
-          <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: 0</p>
+          <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: {userProfile.wld}</p>
 
           <div style={{width:'100%', maxWidth:'400px', flex:1, position:'relative', display:'flex', justifyContent:'center', alignItems:'center'}}>
             {cards.slice(swipeIndex).map((card, idx) => {
@@ -165,10 +175,10 @@ export default function App() {
 
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
-                      <button onClick={()=>handlePremium('boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>
-                      <button onClick={()=>handlePremium('gold')} style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
-                      <button onClick={()=>handlePremium('platinum')} style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
-                      <button onClick={()=>handlePremium('diamond')} style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
+                      <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>
+                      <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
+                      <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
+                      <button style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
                     </div>
                   )}
                 </div>
@@ -222,4 +232,4 @@ export default function App() {
       )}
     </div>
   )
-}
+    }
