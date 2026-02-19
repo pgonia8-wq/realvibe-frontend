@@ -1,65 +1,88 @@
 import React, { useState, useEffect } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 
-// Cambia esto por tu wallet de prueba donde recibirás los pagos (crea una nueva si no quieres usar la principal)
-const TREASURY_WALLET = '0xTU_DIRECCION_WALLET_AQUI'; // Ejemplo: '0x1234567890abcdef1234567890abcdef12345678'
+// Cambia esto por tu wallet de prueba
+const TREASURY_WALLET = '0xTU_DIRECCION_WALLET_AQUI';
+
+const MAX_FREE_SWIPES_PER_DAY = 10;
 
 export default function App() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [boostActive, setBoostActive] = useState(false);
   const [subscriptionLevel, setSubscriptionLevel] = useState<'none' | 'gold' | 'platinum' | 'diamond'>('none');
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [freeSwipesLeft, setFreeSwipesLeft] = useState(MAX_FREE_SWIPES_PER_DAY);
+  const [lastSwipeDate, setLastSwipeDate] = useState<string | null>(null);
+  const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
 
-  // Función para conectar wallet
+  // Cargar estado de swipes desde localStorage al iniciar
+  useEffect(() => {
+    const storedDate = localStorage.getItem('lastSwipeDate');
+    const storedSwipes = localStorage.getItem('freeSwipesLeft');
+
+    if (storedDate && storedSwipes) {
+      const today = new Date().toDateString();
+      if (storedDate === today) {
+        setFreeSwipesLeft(Number(storedSwipes));
+        setLastSwipeDate(storedDate);
+      } else {
+        // Nuevo día → resetear
+        localStorage.setItem('lastSwipeDate', today);
+        localStorage.setItem('freeSwipesLeft', MAX_FREE_SWIPES_PER_DAY.toString());
+        setFreeSwipesLeft(MAX_FREE_SWIPES_PER_DAY);
+        setLastSwipeDate(today);
+      }
+    } else {
+      // Primera vez
+      const today = new Date().toDateString();
+      localStorage.setItem('lastSwipeDate', today);
+      localStorage.setItem('freeSwipesLeft', MAX_FREE_SWIPES_PER_DAY.toString());
+      setLastSwipeDate(today);
+    }
+  }, []);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   const connectWallet = async () => {
     if (!MiniKit.isInstalled()) {
-      alert('Abre esta app dentro de World App para conectar tu wallet. ¡Descárgala si no la tienes!');
+      showToast('Abre esta app dentro de World App', 'error');
       return;
     }
 
     setLoading(true);
     try {
-      // Nonce simple para pruebas
       const nonce = Math.random().toString(36).substring(2);
-
-      const response = await MiniKit.commandsAsync.walletAuth({
-        nonce,
-        statement: 'Conectar a RealVibe 3.0',
-      });
+      const response = await MiniKit.commandsAsync.walletAuth({ nonce, statement: 'Conectar a RealVibe 3.0' });
 
       if (response.finalPayload.status === 'success') {
         const address = response.finalPayload.address;
         setWalletAddress(address);
-        alert('¡Conectado! Tu wallet: ' + address.slice(0,6) + '...' + address.slice(-4));
+        showToast('¡Conectado exitosamente!');
       } else {
-        alert('Conexión cancelada o fallida');
+        showToast('Conexión cancelada', 'error');
       }
     } catch (error) {
-      alert('Error al conectar: ' + (error instanceof Error ? error.message : 'Desconocido'));
-      console.error(error);
+      showToast('Error al conectar', 'error');
     }
     setLoading(false);
   };
 
-  // Función común para todos los pagos
   const handlePayment = async (amount: number, type: string, desc: string) => {
-    if (!walletAddress) return alert('Conecta tu wallet primero');
+    if (!walletAddress) return showToast('Conecta tu wallet primero', 'error');
 
-    // Para Boost no bloqueamos por suscripción, pero para Gold/Platinum/Diamond sí
     if (type !== 'boost' && subscriptionLevel !== 'none') {
-      return alert('Ya tienes una suscripción activa');
+      return showToast('Ya tienes una suscripción activa', 'error');
     }
 
     try {
       const payload = {
         reference: `\( {type}- \){Date.now()}`,
         to: TREASURY_WALLET,
-        tokens: [
-          {
-            symbol: Tokens.WLD,
-            token_amount: tokenToDecimals(amount, Tokens.WLD).toString(),
-          },
-        ],
+        tokens: [{ symbol: Tokens.WLD, token_amount: tokenToDecimals(amount, Tokens.WLD).toString() }],
         description: desc + ' en RealVibe 3.0',
       };
 
@@ -68,18 +91,16 @@ export default function App() {
       if (finalPayload.status === 'success') {
         if (type === 'boost') {
           setBoostActive(true);
-          alert('¡Pago exitoso! Boost activado por 24 horas 🎉');
+          showToast('¡Boost activado por 24 horas!');
         } else {
-          setSubscriptionLevel(type as 'gold' | 'platinum' | 'diamond');
-          alert(`¡Pago exitoso! Suscripción ${desc} activada 💎`);
+          setSubscriptionLevel(type as any);
+          showToast(`¡Suscripción ${desc} activada!`);
         }
-        // Más adelante: guardar en Supabase
       } else {
-        alert('Pago cancelado o fallido');
+        showToast('Pago cancelado', 'error');
       }
     } catch (error) {
-      alert('Error en el pago: ' + (error instanceof Error ? error.message : 'Desconocido'));
-      console.error(error);
+      showToast('Error en el pago', 'error');
     }
   };
 
@@ -88,153 +109,174 @@ export default function App() {
   const doPlatinum = () => handlePayment(25, 'platinum', 'Platinum');
   const doDiamond = () => handlePayment(40, 'diamond', 'Diamond');
 
+  const handleAction = (action: 'like' | 'dislike') => {
+    if (freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none') {
+      return showToast('Límite diario alcanzado. Usa Boost o suscripción', 'error');
+    }
+
+    // Disminuir swipe gratis solo si no hay boost/suscripción activa
+    if (!boostActive && subscriptionLevel === 'none') {
+      const newSwipes = freeSwipesLeft - 1;
+      setFreeSwipesLeft(newSwipes);
+      localStorage.setItem('freeSwipesLeft', newSwipes.toString());
+      localStorage.setItem('lastSwipeDate', new Date().toDateString());
+    }
+
+    showToast(`¡${action.toUpperCase()} enviado!`);
+    // Más adelante: guardar en Supabase y pasar a siguiente perfil
+  };
+
+  if (currentScreen === 'chat') {
+    return (
+      <div style={{ backgroundColor: '#6C1A36', minHeight: '100vh', color: '#fff', padding: '20px' }}>
+        <h2>Chat</h2>
+        <p>Chat en desarrollo. Próximamente mensajes realtime.</p>
+        <button 
+          onClick={() => setCurrentScreen('home')}
+          style={{ marginTop: '20px', padding: '12px 24px', background: 'pink', borderRadius: '50px', border: 'none', color: '#000' }}
+        >
+          Volver
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       backgroundColor: '#6C1A36',
       minHeight: '100vh',
       color: '#fff',
       fontFamily: "'Plus Jakarta Sans', sans-serif",
-      padding: '10px',
+      padding: '15px',
       boxSizing: 'border-box',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center'
+      position: 'relative'
     }}>
-      <div style={{width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
-        <button style={{background: 'transparent', color: '#fff', fontSize: '1.5rem', border: 'none'}}>←</button>
-        <h1 style={{margin: 0}}>RealVibe 3.0</h1>
-        <button style={{background: 'transparent', color: '#fff', fontSize: '1.5rem', border: 'none'}}>⚙️</button>
+      {/* Toast flotante */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '12px 24px',
+          borderRadius: '50px',
+          background: toastMessage.type === 'success' ? 'rgba(0,255,0,0.85)' : 'rgba(255,0,0,0.85)',
+          color: '#fff',
+          fontWeight: 'bold',
+          zIndex: 1000,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+        <button style={{ background: 'transparent', color: '#fff', fontSize: '1.8rem', border: 'none' }}>←</button>
+        <h1 style={{ margin: 0, fontSize: '1.8rem' }}>RealVibe 3.0</h1>
+        <button style={{ background: 'transparent', color: '#fff', fontSize: '1.8rem', border: 'none' }}>⚙️</button>
       </div>
 
+      {walletAddress && (
+        <div style={{ textAlign: 'center', marginBottom: '15px', fontSize: '0.95rem' }}>
+          <p>Wallet: {walletAddress.slice(0,6)}...{walletAddress.slice(-4)}</p>
+          <p>Swipes gratis hoy: {freeSwipesLeft} / {MAX_FREE_SWIPES_PER_DAY}</p>
+          {subscriptionLevel !== 'none' && (
+            <p style={{ color: '#ffd700', fontWeight: 'bold' }}>
+              Suscripción activa: {subscriptionLevel.toUpperCase()}
+            </p>
+          )}
+          {boostActive && <p style={{ color: '#ff8c00', fontWeight: 'bold' }}>Boost activo 24h 🔥</p>}
+        </div>
+      )}
+
       {!walletAddress ? (
-        <div style={{textAlign: 'center', marginTop: '100px'}}>
-          <p>Conecta tu wallet de World App para empezar</p>
+        <div style={{ textAlign: 'center', marginTop: '120px' }}>
+          <p>Conecta tu wallet para empezar</p>
           <button 
             onClick={connectWallet}
             disabled={loading}
             style={{
-              padding: '15px 40px',
-              fontSize: '1.2rem',
+              marginTop: '25px',
+              padding: '16px 50px',
+              fontSize: '1.3rem',
               borderRadius: '50px',
               background: 'linear-gradient(90deg, #ff69b4, #8a2be2)',
               color: '#fff',
               border: 'none',
-              cursor: 'pointer',
-              marginTop: '20px'
+              cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
             {loading ? 'Conectando...' : '🔗 Conectar Wallet'}
           </button>
         </div>
       ) : (
-        <div style={{textAlign: 'center', marginTop: '50px', width: '100%', maxWidth: '400px'}}>
-          <p>¡Conectado! Wallet: {walletAddress.slice(0,6)}...{walletAddress.slice(-4)}</p>
-
+        <>
           {/* Botones de pago */}
-          <div style={{ marginTop: '30px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '15px' }}>
-            <button
-              onClick={doBoost}
-              disabled={boostActive}
-              style={{
-                padding: '12px 24px',
-                fontSize: '1rem',
-                borderRadius: '50px',
-                background: boostActive ? '#888' : 'orange',
-                color: boostActive ? '#fff' : '#000',
-                border: 'none',
-                cursor: boostActive ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {boostActive ? 'Boost Activo 24h' : 'Boost 1 WLD'}
-            </button>
-
-            <button
-              onClick={doGold}
-              disabled={subscriptionLevel !== 'none'}
-              style={{
-                padding: '12px 24px',
-                fontSize: '1rem',
-                borderRadius: '50px',
-                background: subscriptionLevel === 'gold' ? '#888' : 'gold',
-                color: '#000',
-                border: 'none',
-                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {subscriptionLevel === 'gold' ? 'Gold Activo' : 'Gold 10 WLD'}
-            </button>
-
-            <button
-              onClick={doPlatinum}
-              disabled={subscriptionLevel !== 'none'}
-              style={{
-                padding: '12px 24px',
-                fontSize: '1rem',
-                borderRadius: '50px',
-                background: subscriptionLevel === 'platinum' ? '#888' : 'silver',
-                color: '#000',
-                border: 'none',
-                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {subscriptionLevel === 'platinum' ? 'Platinum Activo' : 'Platinum 25 WLD'}
-            </button>
-
-            <button
-              onClick={doDiamond}
-              disabled={subscriptionLevel !== 'none'}
-              style={{
-                padding: '12px 24px',
-                fontSize: '1rem',
-                borderRadius: '50px',
-                background: subscriptionLevel === 'diamond' ? '#888' : 'cyan',
-                color: '#000',
-                border: 'none',
-                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {subscriptionLevel === 'diamond' ? 'Diamond Activo' : 'Diamond 40 WLD'}
-            </button>
+          <div style={{ margin: '20px 0', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px' }}>
+            <button onClick={doBoost} disabled={boostActive} className="pay-btn boost">Boost 1 WLD</button>
+            <button onClick={doGold} disabled={subscriptionLevel !== 'none'} className="pay-btn gold">Gold 10 WLD</button>
+            <button onClick={doPlatinum} disabled={subscriptionLevel !== 'none'} className="pay-btn platinum">Platinum 25 WLD</button>
+            <button onClick={doDiamond} disabled={subscriptionLevel !== 'none'} className="pay-btn diamond">Diamond 40 WLD</button>
           </div>
 
-          {/* Tarjeta de ejemplo */}
+          {/* Tarjeta perfil */}
           <div style={{
-            background: 'linear-gradient(90deg, #ff69b4, #8a2be2)',
-            borderRadius: '20px',
+            background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
+            borderRadius: '24px',
             padding: '20px',
-            margin: '30px auto',
+            margin: '0 auto',
+            maxWidth: '380px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
             textAlign: 'center'
           }}>
             <img 
-              src="https://placekitten.com/300/300" 
-              alt="José" 
-              style={{width: '100%', borderRadius: '15px', marginBottom: '10px'}}
+              src="https://placekitten.com/400/500" 
+              alt="Perfil" 
+              style={{ width: '100%', borderRadius: '16px', marginBottom: '15px', boxShadow: '0 5px 15px rgba(0,0,0,0.3)' }}
             />
-            <h2>José</h2>
-            <p>Amante de la música</p>
-            <div style={{display: 'flex', justifyContent: 'center', gap: '10px', margin: '20px 0'}}>
-              <button style={{padding: '10px 20px', background: '#888', borderRadius: '12px', color: '#fff', border: 'none'}}>Dislike</button>
-              <button style={{padding: '10px 20px', background: 'linear-gradient(#ff69b4,#8a2be2)', borderRadius: '12px', color: '#fff', border: 'none'}}>Like</button>
+            <h2 style={{ margin: '10px 0', fontSize: '1.6rem' }}>José</h2>
+            <p style={{ margin: '8px 0', fontSize: '1.1rem' }}>Amante de la música</p>
+            <p style={{ fontSize: '0.95rem', opacity: 0.9 }}>CDMX • 24 años</p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '25px' }}>
+              <button 
+                onClick={() => handleAction('dislike')}
+                disabled={freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none'}
+                style={{ padding: '14px 30px', background: '#555', borderRadius: '50px', color: '#fff', border: 'none', fontSize: '1.1rem' }}
+              >
+                Dislike
+              </button>
+              <button 
+                onClick={() => handleAction('like')}
+                disabled={freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none'}
+                style={{ padding: '14px 40px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', borderRadius: '50px', color: '#fff', border: 'none', fontSize: '1.1rem' }}
+              >
+                Like
+              </button>
             </div>
           </div>
 
-          <p>Próximamente: perfiles reales, swipe y chat</p>
-        </div>
+          <p style={{ textAlign: 'center', marginTop: '30px', opacity: 0.8 }}>Próximamente: más perfiles y chat realtime</p>
+        </>
       )}
 
-      {/* Botón Chat flotante */}
-      <button style={{
-        position: 'fixed',
-        bottom: '20px',
-        right: '20px',
-        background: 'pink',
-        color: '#000',
-        padding: '12px 16px',
-        borderRadius: '50px',
-        fontWeight: '700',
-        border: 'none',
-        zIndex: 1000
-      }}>
+      {/* Botón Chat */}
+      <button 
+        onClick={() => setCurrentScreen('chat')}
+        style={{
+          position: 'fixed',
+          bottom: '25px',
+          right: '25px',
+          background: 'linear-gradient(45deg, pink, #ff69b4)',
+          color: '#000',
+          padding: '16px 24px',
+          borderRadius: '50px',
+          fontWeight: 'bold',
+          border: 'none',
+          boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
+          zIndex: 1000
+        }}
+      >
         Chat
       </button>
     </div>
