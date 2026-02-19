@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 
-// Cambia esto por tu wallet de prueba
+// Cambia esto por tu wallet de prueba donde recibirás los pagos
 const TREASURY_WALLET = '0xTU_DIRECCION_WALLET_AQUI';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
@@ -23,12 +23,40 @@ export default function App() {
   const [lastSwipeDate, setLastSwipeDate] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: 'Hola! ¿Cómo estás?', sender: 'other', time: '02:45' },
-    { id: 2, text: 'Bien, y tú?', sender: 'me', time: '02:46' },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar swipes desde localStorage
+  // Cargar mensajes desde localStorage al abrir el chat
+  useEffect(() => {
+    if (currentScreen === 'chat') {
+      const storedMessages = localStorage.getItem('chatMessages');
+      if (storedMessages) {
+        setMessages(JSON.parse(storedMessages));
+      } else {
+        // Mensajes de ejemplo iniciales
+        const initial = [
+          { id: 1, text: 'Hola! ¿Cómo estás?', sender: 'other', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+          { id: 2, text: 'Bien, y tú?', sender: 'me', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+        ];
+        setMessages(initial);
+        localStorage.setItem('chatMessages', JSON.stringify(initial));
+      }
+    }
+  }, [currentScreen]);
+
+  // Guardar mensajes cada vez que cambien
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem('chatMessages', JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  // Scroll automático al último mensaje
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Cargar estado de swipes gratis desde localStorage
   useEffect(() => {
     const storedDate = localStorage.getItem('lastSwipeDate');
     const storedSwipes = localStorage.getItem('freeSwipesLeft');
@@ -139,7 +167,7 @@ export default function App() {
 
     const newMsg: Message = {
       id: messages.length + 1,
-      text: chatInput,
+      text: chatInput.trim(),
       sender: 'me',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
@@ -147,16 +175,17 @@ export default function App() {
     setMessages([...messages, newMsg]);
     setChatInput('');
 
-    // Simular respuesta del otro (opcional, para testing)
+    // Simular respuesta automática del otro usuario (para testing)
     setTimeout(() => {
+      const replies = ['¡Genial! 😊', 'Jajaja qué bueno', 'Me encanta eso', 'Cuéntame más', 'Totalmente de acuerdo', 'Qué interesante 🤔'];
       const reply: Message = {
         id: messages.length + 2,
-        text: '¡Genial! ¿Y tú qué tal?',
+        text: replies[Math.floor(Math.random() * replies.length)],
         sender: 'other',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, reply]);
-    }, 1500);
+    }, 1000 + Math.random() * 1500);
   };
 
   if (currentScreen === 'chat') {
@@ -175,16 +204,20 @@ export default function App() {
             onClick={() => setCurrentScreen('home')}
             style={{ background: 'transparent', color: '#fff', fontSize: '1.5rem', border: 'none' }}
           >
-            ← Volver
+            ←
           </button>
-          <h2 style={{ margin: 0 }}>Chat con José</h2>
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Chat con José</h2>
+            <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>Activo ahora</p>
+          </div>
+          <div style={{ width: '40px' }} />
         </div>
 
         <div style={{ 
           flex: 1, 
           overflowY: 'auto', 
-          padding: '10px', 
-          background: 'rgba(255,255,255,0.05)', 
+          padding: '10px 0',
+          background: 'rgba(0,0,0,0.25)',
           borderRadius: '16px',
           marginBottom: '15px'
         }}>
@@ -192,29 +225,57 @@ export default function App() {
             <div 
               key={msg.id}
               style={{
-                marginBottom: '12px',
+                margin: '10px 15px',
                 display: 'flex',
-                justifyContent: msg.sender === 'me' ? 'flex-end' : 'flex-start'
+                justifyContent: msg.sender === 'me' ? 'flex-end' : 'flex-start',
+                alignItems: 'flex-start'
               }}
             >
+              {msg.sender === 'other' && (
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
+                  marginRight: '12px',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.3rem',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                }}>
+                  👤
+                </div>
+              )}
+
               <div style={{
-                maxWidth: '70%',
+                maxWidth: '72%',
                 padding: '12px 16px',
-                borderRadius: '20px',
-                background: msg.sender === 'me' ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : '#444',
+                borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                background: msg.sender === 'me' 
+                  ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' 
+                  : 'rgba(255,255,255,0.12)',
                 color: '#fff',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                wordBreak: 'break-word'
               }}>
                 {msg.text}
-                <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px', textAlign: 'right' }}>
+                <div style={{ 
+                  fontSize: '0.75rem', 
+                  opacity: 0.75, 
+                  marginTop: '6px', 
+                  textAlign: msg.sender === 'me' ? 'right' : 'left' 
+                }}>
                   {msg.time}
                 </div>
               </div>
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', background: 'rgba(0,0,0,0.25)', padding: '10px 12px', borderRadius: '50px' }}>
           <input
             type="text"
             value={chatInput}
@@ -222,28 +283,34 @@ export default function App() {
             placeholder="Escribe un mensaje..."
             style={{
               flex: 1,
-              padding: '14px',
+              padding: '14px 18px',
               borderRadius: '50px',
               border: 'none',
-              background: 'rgba(255,255,255,0.1)',
+              background: 'rgba(255,255,255,0.08)',
               color: '#fff',
-              fontSize: '1rem'
+              fontSize: '1rem',
+              outline: 'none'
             }}
             onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
           />
           <button
             onClick={sendMessage}
+            disabled={!chatInput.trim()}
             style={{
-              padding: '14px 24px',
-              background: 'linear-gradient(90deg, #ff69b4, #8a2be2)',
+              padding: '14px 20px',
+              background: chatInput.trim() ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : '#555',
               borderRadius: '50px',
               border: 'none',
               color: '#fff',
               fontWeight: 'bold',
-              cursor: 'pointer'
+              cursor: chatInput.trim() ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: '54px'
             }}
           >
-            Enviar
+            ➤
           </button>
         </div>
       </div>
@@ -260,7 +327,7 @@ export default function App() {
       boxSizing: 'border-box',
       position: 'relative'
     }}>
-      {/* Toast */}
+      {/* Toast flotante */}
       {toastMessage && (
         <div style={{
           position: 'fixed',
@@ -320,7 +387,7 @@ export default function App() {
         </div>
       ) : (
         <>
-          {/* Botones de pago - pequeños y con degradados */}
+          {/* Botones de pago */}
           <div style={{
             margin: '20px 0',
             display: 'grid',
@@ -403,7 +470,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Tarjeta perfil - grande */}
+          {/* Tarjeta perfil */}
           <div style={{
             background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
             borderRadius: '24px',
@@ -462,7 +529,7 @@ export default function App() {
         </>
       )}
 
-      {/* Botón Chat */}
+      {/* Botón Chat flotante */}
       <button 
         onClick={() => setCurrentScreen('chat')}
         style={{
