@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
-// === CONFIGURACIÓN (tus datos reales) ===
+// === CONFIGURACIÓN SUPABASE (tus datos reales) ===
 const SUPABASE_URL = 'https://bogcdpwnnjxfgfdcewif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvZ2NkcHdubmp4ZmdmZGNld2lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyOTM2MjgsImV4cCI6MjA4Njg2OTYyOH0.65pFiqgEmjogf73mZCG-yT2BZqx6Q8cbA_Ce9RhnIhQ';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -104,7 +104,7 @@ export default function App() {
     };
   }, [currentScreen, walletAddress]);
 
-  // Scroll al final
+  // Scroll automático
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -335,7 +335,6 @@ export default function App() {
     );
   }
 
-  // Resto de la app (home con swipe, pagos, etc.)
   return (
     <div style={{
       backgroundColor: '#6C1A36',
@@ -509,4 +508,4 @@ export default function App() {
       </button>
     </div>
   );
-}
+         }
