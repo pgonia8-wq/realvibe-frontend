@@ -139,10 +139,19 @@ export default function App() {
     }, 500);
   };
 
+  // CORRECCIÓN: botón de chat siempre abre la ventana aunque no haya match
   const openChat = async () => {
-    if (!currentMatchId) return;
-    setCurrentScreen('chat');
-    const { data } = await supabase.from('messages').select('*').eq('match_id', currentMatchId).order('sent_at', { ascending: true });
+    setCurrentScreen('chat'); // abre la ventana siempre
+    if (!currentMatchId) {
+      setChatMessages([]); // chat vacío si no hay match
+      return;
+    }
+
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('match_id', currentMatchId)
+      .order('sent_at', { ascending: true });
     if (data) setChatMessages(data);
   };
 
@@ -227,11 +236,8 @@ export default function App() {
 
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
-                      <button 
-                        onClick={()=>{if(!boostActive) handleSwipe('right','boost')}} 
-                        style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}
-                      >
-                        {boostActive ? 'Activo 24h' : 'Boost 1 WLD'}
+                      <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>
+                        Boost 1 WLD {boostActive && '(Activo 24h)'}
                       </button>
                       <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
                       <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
@@ -309,4 +315,4 @@ export default function App() {
       )}
     </div>
   )
-     }
+    }
