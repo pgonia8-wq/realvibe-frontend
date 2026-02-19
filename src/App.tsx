@@ -8,6 +8,7 @@ type Profile = {
   image: string;
   wld: number;
   subscriptionActive: boolean;
+  boostActiveUntil?: string;
 };
 
 type Message = {
@@ -32,6 +33,7 @@ export default function App() {
   const [alertColor, setAlertColor] = useState<string>('');
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [currentMatchId, setCurrentMatchId] = useState<string>('');
 
   const [userProfile, setUserProfile] = useState<Profile>({
     id: 'pgonia.world.id',
@@ -97,6 +99,7 @@ export default function App() {
       if (type === 'boost') {
         const boostExpiry = new Date();
         boostExpiry.setHours(boostExpiry.getHours() + 24);
+        setUserProfile(prev => ({ ...prev, boostActiveUntil: boostExpiry.toISOString() }));
         await supabase.from('profiles').update({ boost_active_until: boostExpiry.toISOString() }).eq('id', userProfile.id);
       }
 
@@ -117,7 +120,8 @@ export default function App() {
           .limit(1)
           .single();
         if (!match) {
-          await supabase.from('matches').insert({ user1_id: userProfile.id, user2_id: topCard.id });
+          const { data: newMatch } = await supabase.from('matches').insert({ user1_id: userProfile.id, user2_id: topCard.id }).select().single();
+          if (newMatch) setCurrentMatchId(newMatch.id);
         }
       }
 
@@ -135,18 +139,19 @@ export default function App() {
     }, 500);
   };
 
-  const openChat = async (matchId: string) => {
+  const openChat = async () => {
+    if (!currentMatchId) return;
     setCurrentScreen('chat');
-    const { data } = await supabase.from('messages').select('*').eq('match_id', matchId).order('sent_at', { ascending: true });
+    const { data } = await supabase.from('messages').select('*').eq('match_id', currentMatchId).order('sent_at', { ascending: true });
     if (data) setChatMessages(data);
   };
 
-  const sendMessage = async (matchId: string) => {
-    if (!chatInput) return;
+  const sendMessage = async () => {
+    if (!chatInput || !currentMatchId) return;
     const { data } = await supabase.from('messages').insert([{
-      match_id: matchId,
+      match_id: currentMatchId,
       sender_id: userProfile.id,
-      receiver_id: cards[swipeIndex].id,
+      receiver_id: cards[swipeIndex]?.id || 'unknown',
       message: chatInput,
       sent_at: new Date()
     }]);
@@ -154,8 +159,13 @@ export default function App() {
     setChatInput('');
   };
 
+  const boostActive = userProfile.boostActiveUntil ? new Date(userProfile.boostActiveUntil) > new Date() : false;
+
   return (
     <div style={{backgroundColor:'#6C1A36', minHeight:'100vh', fontFamily:"'Plus Jakarta Sans', sans-serif", color:'#fff', display:'flex', flexDirection:'column', alignItems:'center', padding:'10px', boxSizing:'border-box'}}>
+      
+      <button onClick={openChat} style={{position:'fixed', bottom:'20px', right:'20px', background:'pink', color:'#000', padding:'12px 16px', borderRadius:'50px', zIndex:10000, fontWeight:'700'}}>Chat</button>
+      
       {currentScreen === 'home' && (
         <>
           <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
@@ -217,7 +227,12 @@ export default function App() {
 
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
-                      <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>
+                      <button 
+                        onClick={()=>{if(!boostActive) handleSwipe('right','boost')}} 
+                        style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}
+                      >
+                        {boostActive ? 'Activo 24h' : 'Boost 1 WLD'}
+                      </button>
                       <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
                       <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
                       <button style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
@@ -253,11 +268,11 @@ export default function App() {
 
       {currentScreen === 'chat' && (
         <div style={{width:'100%', maxWidth:'400px', flex:1, display:'flex', flexDirection:'column', gap:'5px'}}>
-          <h2>Chat</h2>
-          <div style={{flex:1, overflowY:'auto', border:'1px solid #fff', borderRadius:'12px', padding:'10px'}}>
+          <h2 style={{textAlign:'center'}}>Chat</h2>
+          <div style={{flex:1, overflowY:'auto', border:'2px solid #ff69b4', borderRadius:'12px', padding:'10px', background:'#fff', color:'#000'}}>
             {chatMessages.map((msg) => (
               <div key={msg.id} style={{textAlign: msg.sender_id === userProfile.id ? 'right' : 'left'}}>
-                <span style={{background: msg.sender_id === userProfile.id ? '#ff69b4' : '#00bfff', padding:'5px 10px', borderRadius:'12px', display:'inline-block', margin:'2px 0'}}>
+                <span style={{background: msg.sender_id === userProfile.id ? '#ff69b4' : '#00bfff', padding:'5px 10px', borderRadius:'12px', display:'inline-block', margin:'2px 0', color:'#fff'}}>
                   {msg.message}
                 </span>
               </div>
@@ -265,7 +280,7 @@ export default function App() {
           </div>
           <div style={{display:'flex', gap:'5px', marginTop:'5px'}}>
             <input style={{flex:1, padding:'8px', borderRadius:'12px'}} value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="Escribe un mensaje"/>
-            <button style={{padding:'10px 16px', borderRadius:'12px', background:'green', color:'#fff'}} onClick={()=>sendMessage(chatMessages[0]?.match_id || cards[swipeIndex].id)}>Enviar</button>
+            <button style={{padding:'10px 16px', borderRadius:'12px', background:'green', color:'#fff'}} onClick={sendMessage}>Enviar</button>
           </div>
           <button style={{marginTop:'10px', borderRadius:'12px', padding:'10px 16px', background:'orange', color:'#fff'}} onClick={()=>setCurrentScreen('home')}>Volver</button>
         </div>
