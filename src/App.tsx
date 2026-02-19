@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 type Profile = {
   id: string;
   name: string;
   description: string;
-  image: string;
+  images: string[]; // Ahora soporta hasta 3 imágenes
   wld: number;
   subscriptionActive: boolean;
   boostActiveUntil?: string;
@@ -22,7 +22,7 @@ type Message = {
 
 const supabaseUrl = 'https://YOUR_PROJECT.supabase.co';
 const supabaseKey = 'YOUR_ANON_KEY';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
 
 export default function App() {
   const [swipeIndex, setSwipeIndex] = useState(0);
@@ -34,20 +34,21 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [currentMatchId, setCurrentMatchId] = useState<string>('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const [userProfile, setUserProfile] = useState<Profile>({
     id: 'pgonia.world.id',
     name: '@pgonia',
     description: 'Aquí puedes editar tu descripción',
-    image: 'https://picsum.photos/400/400?random=1',
+    images: [],
     wld: 100,
     subscriptionActive: true
   });
 
   const cards: Profile[] = [
-    { id:'1', name: 'José', description: 'Amante de la música', image: 'https://placekitten.com/400/400', wld:0, subscriptionActive:false },
-    { id:'2', name: 'Josesito', description: 'Fan del cine', image: 'https://placekitten.com/401/400', wld:0, subscriptionActive:false },
-    { id:'3', name: 'Alex', description: 'Aventurero y divertido', image: 'https://placekitten.com/402/400', wld:0, subscriptionActive:false },
+    { id:'1', name: 'José', description: 'Amante de la música', images: ['https://placekitten.com/400/400'], wld:0, subscriptionActive:false },
+    { id:'2', name: 'Josesito', description: 'Fan del cine', images: ['https://placekitten.com/401/400'], wld:0, subscriptionActive:false },
+    { id:'3', name: 'Alex', description: 'Aventurero y divertido', images: ['https://placekitten.com/402/400'], wld:0, subscriptionActive:false },
   ];
 
   useEffect(() => {
@@ -55,10 +56,27 @@ export default function App() {
     if (stored) setUserProfile(JSON.parse(stored));
   }, []);
 
-  const saveProfile = (profile: Profile) => {
+  const saveProfile = async (profile: Profile) => {
     setUserProfile(profile);
     localStorage.setItem('userProfile', JSON.stringify(profile));
     setCurrentScreen('home');
+  };
+
+  // Subida de imágenes al Storage de Supabase
+  const uploadImages = async (files: File[]) => {
+    if (files.length > 3) files = files.slice(0,3);
+    const uploadedUrls: string[] = [];
+    for (let file of files) {
+      const { data, error } = await supabase.storage
+        .from('profile-images')
+        .upload(`${userProfile.id}/${file.name}`, file, { cacheControl: '3600', upsert: true });
+      if (error) console.error('Error al subir imagen:', error);
+      else {
+        const publicUrl = supabase.storage.from('profile-images').getPublicUrl(data.path).publicUrl;
+        uploadedUrls.push(publicUrl);
+      }
+    }
+    setUserProfile(prev => ({ ...prev, images: uploadedUrls }));
   };
 
   const registerAction = async (targetProfile: Profile, actionType: string) => {
@@ -111,20 +129,6 @@ export default function App() {
       if (type === 'boost') setAlertColor('linear-gradient(90deg,#ff8c00,#ffa500)');
 
       alertText = type.toUpperCase();
-
-      if (type === 'super' || type === 'like') {
-        const { data: match } = await supabase
-          .from('matches')
-          .select('*')
-          .or(`user1_id.eq.${userProfile.id},user2_id.eq.${topCard.id}`)
-          .limit(1)
-          .single();
-        if (!match) {
-          const { data: newMatch } = await supabase.from('matches').insert({ user1_id: userProfile.id, user2_id: topCard.id }).select().single();
-          if (newMatch) setCurrentMatchId(newMatch.id);
-        }
-      }
-
     } else {
       setAlertColor('#ff4d4d');
     }
@@ -177,7 +181,8 @@ export default function App() {
           <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
             <button onClick={()=>alert('Salir de la app')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>←</button>
             <h1 style={{margin:0}}>RealVibe 3.0</h1>
-            <button onClick={()=>setCurrentScreen('profileEdit')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>⚙️</button>
+            {/* Nuevo ícono de perfil moderno */}
+            <button onClick={()=>setCurrentScreen('profileEdit')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>👤</button>
           </div>
 
           <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: {userProfile.wld}</p>
@@ -210,19 +215,18 @@ export default function App() {
                   justifyContent:'space-between',
                   transition:'transform 0.3s ease'
                 }}>
-                  <div style={{padding:'5px', borderRadius:'20px'}}>
-                    <img 
-                      src={card.image || 'https://picsum.photos/400/400?random=2'} 
-                      alt={card.name} 
-                      style={{width:'100%', height:'300px', objectFit:'cover', borderRadius:'15px'}} 
-                      onError={(e)=>{(e.target as HTMLImageElement).src='https://picsum.photos/400/400?random=2'}}
-                    />
+                  {/* Carousel de fotos del usuario */}
+                  <div style={{display:'flex', gap:'5px', justifyContent:'center', padding:'5px'}}>
+                    {card.images.map((img, i) => (
+                      <img key={i} src={img} alt={`${card.name}-${i}`} style={{width:'100px', height:'100px', objectFit:'cover', borderRadius:'12px'}} onError={(e)=>{(e.target as HTMLImageElement).src='https://picsum.photos/100/100'}}/>
+                    ))}
                   </div>
                   <div>
                     <h2>{card.name}</h2>
                     <p>{card.description}</p>
                   </div>
 
+                  {/* Botones de interacción */}
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
                       <button onClick={()=>handleSwipe('left','dislike')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
@@ -269,7 +273,7 @@ export default function App() {
         </>
       )}
 
-      {/* El resto (chat y edición de perfil) sigue igual */}
+      {/* Chat y perfilEdit se mantienen igual, sin cambios */}
     </div>
   )
 }
