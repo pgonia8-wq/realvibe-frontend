@@ -2,16 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
-// === CONFIGURACIÓN SUPABASE (ya con tus datos reales) ===
+// === CONFIGURACIÓN SUPABASE (cámbialas por las tuyas reales si no están) ===
 const SUPABASE_URL = 'https://bogcdpwnnjxfgfdcewif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvZ2NkcHdubmp4ZmdmZGNld2lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyOTM2MjgsImV4cCI6MjA4Njg2OTYyOH0.65pFiqgEmjogf73mZCG-yT2BZqx6Q8cbA_Ce9RhnIhQ';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Tu wallet real (la que te da MiniKit al conectar)
-const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b'; // tu wallet address
+// Tu wallet de treasury (para recibir pagos de prueba)
+const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
-const TEST_MATCH_ID = 'test-chat-001'; // ID fijo para pruebas (cámbialo cuando tengas matches reales)
+const TEST_MATCH_ID = 'test-chat-001'; // ID fijo para pruebas (puedes cambiarlo)
 
 type Message = {
   id: string;
@@ -62,7 +62,6 @@ export default function App() {
   useEffect(() => {
     if (currentScreen !== 'chat' || !walletAddress) return;
 
-    // Cargar mensajes iniciales
     const loadMessages = async () => {
       const { data, error } = await supabase
         .from('messages')
@@ -85,7 +84,6 @@ export default function App() {
 
     loadMessages();
 
-    // Suscripción realtime
     const channel = supabase
       .channel(`messages:${TEST_MATCH_ID}`)
       .on(
@@ -107,7 +105,7 @@ export default function App() {
     };
   }, [currentScreen, walletAddress]);
 
-  // Scroll automático al final
+  // Scroll automático al último mensaje
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -558,5 +556,21 @@ export default function App() {
       <button 
         onClick={() => setCurrentScreen('chat')}
         style={{
-      </div>
-);
+          position: 'fixed',
+          bottom: '25px',
+          right: '25px',
+          background: 'linear-gradient(45deg, pink, #ff69b4)',
+          color: '#000',
+          padding: '16px 24px',
+          borderRadius: '50px',
+          fontWeight: 'bold',
+          border: 'none',
+          boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
+          zIndex: 1000
+        }}
+      >
+        Chat
+      </button>
+    </div>
+  );
+}
