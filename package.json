@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
+    "@worldcoin/minikit-js": "^1.9.11"
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "wouter": "^2.12.1",
