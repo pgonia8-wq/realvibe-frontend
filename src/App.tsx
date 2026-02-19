@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
 type Profile = {
   name: string;
   description: string;
   image: string;
 };
+
+const supabaseUrl = 'https://YOUR_PROJECT.supabase.co';
+const supabaseKey = 'YOUR_ANON_KEY';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function App() {
   const [swipeIndex, setSwipeIndex] = useState(0);
@@ -37,12 +42,30 @@ export default function App() {
     setCurrentScreen('home');
   };
 
+  const registerAction = async (
+    targetProfile: Profile,
+    type: 'like' | 'dislike' | 'super' | 'boost' | 'gold' | 'platinum' | 'diamond'
+  ) => {
+    try {
+      await supabase.from('actions').insert({
+        user: userProfile.name,
+        target_user: targetProfile.name,
+        action: type,
+        timestamp: new Date()
+      });
+    } catch (err) {
+      console.error('Error guardando acción:', err);
+    }
+  };
+
   const handleSwipe = (direction: 'left' | 'right', type: 'dislike' | 'like' | 'super') => {
     if (isSwiping) return;
     setSwipeDirection(direction);
     setIsSwiping(true);
 
-    // Alerta bonita tipo Tinder
+    const topCard = cards[swipeIndex];
+    registerAction(topCard, type);
+
     if (type === 'dislike') setAlertColor('#888');
     if (type === 'like') setAlertColor('linear-gradient(90deg,#ff69b4,#8a2be2)');
     if (type === 'super') setAlertColor('linear-gradient(90deg,#00bfff,#1e90ff)');
@@ -54,6 +77,20 @@ export default function App() {
       setIsSwiping(false);
       setAlertMessage(null);
     }, 500);
+  };
+
+  const handlePremium = (type: 'boost' | 'gold' | 'platinum' | 'diamond') => {
+    const topCard = cards[swipeIndex];
+    registerAction(topCard, type);
+
+    setAlertColor(
+      type === 'boost' ? 'orange' :
+      type === 'gold' ? 'gold' :
+      type === 'platinum' ? 'silver' :
+      'cyan'
+    );
+    setAlertMessage(type.toUpperCase());
+    setTimeout(() => setAlertMessage(null), 500);
   };
 
   return (
@@ -70,7 +107,6 @@ export default function App() {
     }}>
       {currentScreen === 'home' && (
         <>
-          {/* Header */}
           <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
             <button onClick={()=>alert('Salir de la app')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>←</button>
             <h1 style={{margin:0}}>RealVibe 3.0</h1>
@@ -79,16 +115,15 @@ export default function App() {
 
           <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: 0</p>
 
-          {/* Tarjeta principal */}
-          <div style={{width:'90%', maxWidth:'400px', minHeight:'480px', position:'relative', display:'flex', justifyContent:'center', alignItems:'center'}}>
+          <div style={{width:'100%', maxWidth:'400px', flex:1, position:'relative', display:'flex', justifyContent:'center', alignItems:'center'}}>
             {cards.slice(swipeIndex).map((card, idx) => {
               const isTop = idx === 0;
               return (
                 <div key={card.name} style={{
-                  background: isTop ? '#fff' : 'linear-gradient(90deg,#ff69b4,#8a2be2)', // degradado divertido para la tarjeta de fondo
+                  background: isTop ? '#fff' : 'linear-gradient(90deg,#ff69b4,#8a2be2)',
                   color:isTop ? '#000' : '#fff',
                   borderRadius:'20px',
-                  width:'100%',
+                  width:'90%',
                   minHeight:'480px',
                   padding:'10px',
                   position:'absolute',
@@ -120,7 +155,6 @@ export default function App() {
                     <p>{card.description}</p>
                   </div>
 
-                  {/* Botones Like/Dislike/Super */}
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
                       <button onClick={()=>handleSwipe('left','dislike')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
@@ -129,13 +163,12 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Botones Premium */}
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
-                      <button style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>
-                      <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
-                      <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
-                      <button style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
+                      <button onClick={()=>handlePremium('boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>
+                      <button onClick={()=>handlePremium('gold')} style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
+                      <button onClick={()=>handlePremium('platinum')} style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
+                      <button onClick={()=>handlePremium('diamond')} style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
                     </div>
                   )}
                 </div>
@@ -143,7 +176,6 @@ export default function App() {
             })}
           </div>
 
-          {/* Alerta tipo Tinder */}
           {alertMessage && (
             <div style={{
               position:'absolute',
@@ -167,7 +199,6 @@ export default function App() {
         </>
       )}
 
-      {/* Pantalla edición de perfil */}
       {currentScreen === 'profileEdit' && (
         <div style={{background:'#fff', color:'#000', borderRadius:'20px', width:'90%', maxWidth:'400px', padding:'20px', marginTop:'20px', textAlign:'center'}}>
           <h2>Editar Perfil</h2>
@@ -191,4 +222,4 @@ export default function App() {
       )}
     </div>
   )
-                         }
+}
