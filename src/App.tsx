@@ -124,36 +124,43 @@ export default function App() {
 
           <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: {userProfile.wld}</p>
 
-          <div style={{width:'100%', maxWidth:'400px', flex:1, position:'relative', display:'flex', justifyContent:'center', alignItems:'center'}}>
+          <div style={{
+            width:'100%',
+            maxWidth:'400px',
+            flex:1,
+            display:'flex',
+            justifyContent:'center',
+            alignItems:'center',
+            position:'relative'
+          }}>
             {cards.slice(swipeIndex).map((card, idx) => {
               const isTop = idx === 0;
               return (
                 <div key={card.name} style={{
-                  background: isTop ? '#fff' : 'linear-gradient(90deg,#ff69b4,#8a2be2)',
-                  color:isTop ? '#000' : '#fff',
+                  background: 'linear-gradient(90deg,#ff69b4,#8a2be2)',
+                  color:'#000',
                   borderRadius:'20px',
                   width:'90%',
                   minHeight:'480px',
                   padding:'10px',
                   position:'absolute',
                   top:0,
-                  left:0,
-                  right:0,
+                  left:'50%',
+                  transform: 'translateX(-50%)' + (isTop
+                    ? swipeDirection === 'left'
+                      ? ' translateX(-150%) rotate(-15deg)'
+                      : swipeDirection === 'right'
+                      ? ' translateX(150%) rotate(15deg)'
+                      : ''
+                    : ' scale(0.95)'),
                   textAlign:'center',
                   zIndex: cards.length - idx,
                   display:'flex',
                   flexDirection:'column',
                   justifyContent:'space-between',
-                  transform: isTop
-                    ? swipeDirection === 'left'
-                      ? 'translateX(-150%) rotate(-15deg)'
-                      : swipeDirection === 'right'
-                      ? 'translateX(150%) rotate(15deg)'
-                      : 'translateX(0)'
-                    : 'scale(0.95)',
                   transition:'transform 0.3s ease'
                 }}>
-                  <div style={{padding:'5px', borderRadius:'20px', background:'linear-gradient(90deg,#ff69b4,#8a2be2)'}}>
+                  <div style={{padding:'5px', borderRadius:'20px'}}>
                     <img 
                       src={card.image || 'https://picsum.photos/400/400?random=2'} 
                       alt={card.name} 
@@ -233,4 +240,4 @@ export default function App() {
       )}
     </div>
   )
-  }
+    }
