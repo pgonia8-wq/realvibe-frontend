@@ -2,16 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
-// === CONFIGURACIÓN SUPABASE (cámbialas por las tuyas reales si no están) ===
+// === CONFIGURACIÓN (tus datos reales) ===
 const SUPABASE_URL = 'https://bogcdpwnnjxfgfdcewif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvZ2NkcHdubmp4ZmdmZGNld2lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyOTM2MjgsImV4cCI6MjA4Njg2OTYyOH0.65pFiqgEmjogf73mZCG-yT2BZqx6Q8cbA_Ce9RhnIhQ';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Tu wallet de treasury (para recibir pagos de prueba)
 const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
-const TEST_MATCH_ID = 'test-chat-001'; // ID fijo para pruebas (puedes cambiarlo)
+const TEST_MATCH_ID = 'test-chat-001';
 
 type Message = {
   id: string;
@@ -34,7 +33,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar swipes gratis desde localStorage
+  // Cargar swipes gratis
   useEffect(() => {
     const storedDate = localStorage.getItem('lastSwipeDate');
     const storedSwipes = localStorage.getItem('freeSwipesLeft');
@@ -105,7 +104,7 @@ export default function App() {
     };
   }, [currentScreen, walletAddress]);
 
-  // Scroll automático al último mensaje
+  // Scroll al final
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -191,32 +190,30 @@ export default function App() {
 
     showToast(`¡${action.toUpperCase()} enviado!`);
   };
-const sendMessage = async () => {
-  if (!chatInput.trim() || !walletAddress) {
-    showToast('Escribe algo primero', 'error');
-    return;
-  }
 
-  const newMsg = {
-    match_id: TEST_MATCH_ID,
-    sender_id: walletAddress,
-    text: chatInput.trim(),
+  const sendMessage = () => {
+    if (!chatInput.trim() || !walletAddress) {
+      showToast('Escribe algo primero', 'error');
+      return;
+    }
+
+    const newMsg = {
+      match_id: TEST_MATCH_ID,
+      sender_id: walletAddress,
+      text: chatInput.trim(),
+    };
+
+    supabase.from('messages').insert(newMsg)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Error al enviar:', error);
+          showToast('Error al enviar mensaje', 'error');
+        } else {
+          setChatInput('');
+          showToast('Mensaje enviado');
+        }
+      });
   };
-
-  try {
-    const { error } = await supabase.from('messages').insert(newMsg);
-
-    if (error) throw error;
-
-    setChatInput('');
-    showToast('Mensaje enviado');
-  } catch (error) {
-    console.error('Error al enviar:', error);
-    showToast('Error al enviar mensaje', 'error');
-  }
-};
-
-  
 
   if (currentScreen === 'chat') {
     return (
@@ -234,13 +231,9 @@ const sendMessage = async () => {
             onClick={() => setCurrentScreen('home')}
             style={{ background: 'transparent', color: '#fff', fontSize: '1.5rem', border: 'none' }}
           >
-            ←
+            ← Volver
           </button>
-          <div style={{ textAlign: 'center' }}>
-            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Chat con José</h2>
-            <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>Activo ahora</p>
-          </div>
-          <div style={{ width: '40px' }} />
+          <h2 style={{ margin: 0 }}>Chat con José</h2>
         </div>
 
         <div style={{ 
@@ -305,7 +298,7 @@ const sendMessage = async () => {
           <div ref={messagesEndRef} />
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', background: 'rgba(0,0,0,0.25)', padding: '10px 12px', borderRadius: '50px' }}>
+        <div style={{ display: 'flex', gap: '10px' }}>
           <input
             type="text"
             value={chatInput}
@@ -325,28 +318,24 @@ const sendMessage = async () => {
           />
           <button
             onClick={sendMessage}
-            disabled={!chatInput.trim()}
             style={{
-              padding: '14px 20px',
-              background: chatInput.trim() ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : '#555',
+              padding: '14px 24px',
+              background: 'linear-gradient(90deg, #ff69b4, #8a2be2)',
               borderRadius: '50px',
               border: 'none',
               color: '#fff',
               fontWeight: 'bold',
-              cursor: chatInput.trim() ? 'pointer' : 'not-allowed',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minWidth: '54px'
+              cursor: 'pointer'
             }}
           >
-            ➤
+            Enviar
           </button>
         </div>
       </div>
     );
   }
 
+  // Resto de la app (home con swipe, pagos, etc.)
   return (
     <div style={{
       backgroundColor: '#6C1A36',
@@ -357,7 +346,7 @@ const sendMessage = async () => {
       boxSizing: 'border-box',
       position: 'relative'
     }}>
-      {/* Toast flotante */}
+      {/* Toast */}
       {toastMessage && (
         <div style={{
           position: 'fixed',
@@ -427,75 +416,16 @@ const sendMessage = async () => {
             marginLeft: 'auto',
             marginRight: 'auto'
           }}>
-            <button
-              onClick={doBoost}
-              disabled={boostActive}
-              style={{
-                padding: '12px 8px',
-                fontSize: '0.95rem',
-                borderRadius: '12px',
-                background: boostActive ? '#555' : 'linear-gradient(135deg, #ff8c00, #ff4500)',
-                color: '#fff',
-                border: 'none',
-                fontWeight: 'bold',
-                cursor: boostActive ? 'not-allowed' : 'pointer',
-                boxShadow: '0 3px 10px rgba(255,140,0,0.3)'
-              }}
-            >
+            <button onClick={doBoost} disabled={boostActive} style={{ padding: '12px 8px', fontSize: '0.95rem', borderRadius: '12px', background: boostActive ? '#555' : 'linear-gradient(135deg, #ff8c00, #ff4500)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: boostActive ? 'not-allowed' : 'pointer' }}>
               🔥 Boost 1 WLD
             </button>
-
-            <button
-              onClick={doGold}
-              disabled={subscriptionLevel !== 'none'}
-              style={{
-                padding: '12px 8px',
-                fontSize: '0.95rem',
-                borderRadius: '12px',
-                background: subscriptionLevel === 'gold' ? '#555' : 'linear-gradient(135deg, #b8860b, #ffd700)',
-                color: '#000',
-                border: 'none',
-                fontWeight: 'bold',
-                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 3px 10px rgba(184,134,11,0.4)'
-              }}
-            >
+            <button onClick={doGold} disabled={subscriptionLevel !== 'none'} style={{ padding: '12px 8px', fontSize: '0.95rem', borderRadius: '12px', background: subscriptionLevel === 'gold' ? '#555' : 'linear-gradient(135deg, #b8860b, #ffd700)', color: '#000', border: 'none', fontWeight: 'bold', cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer' }}>
               ⭐ Gold 10 WLD
             </button>
-
-            <button
-              onClick={doPlatinum}
-              disabled={subscriptionLevel !== 'none'}
-              style={{
-                padding: '12px 8px',
-                fontSize: '0.95rem',
-                borderRadius: '12px',
-                background: subscriptionLevel === 'platinum' ? '#555' : 'linear-gradient(135deg, #a9a9a9, #e0e0e0)',
-                color: '#000',
-                border: 'none',
-                fontWeight: 'bold',
-                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 3px 10px rgba(169,169,169,0.4)'
-              }}
-            >
+            <button onClick={doPlatinum} disabled={subscriptionLevel !== 'none'} style={{ padding: '12px 8px', fontSize: '0.95rem', borderRadius: '12px', background: subscriptionLevel === 'platinum' ? '#555' : 'linear-gradient(135deg, #a9a9a9, #e0e0e0)', color: '#000', border: 'none', fontWeight: 'bold', cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer' }}>
               🏆 Platinum 25 WLD
             </button>
-
-            <button
-              onClick={doDiamond}
-              disabled={subscriptionLevel !== 'none'}
-              style={{
-                padding: '12px 8px',
-                fontSize: '0.95rem',
-                borderRadius: '12px',
-                background: subscriptionLevel === 'diamond' ? '#555' : 'linear-gradient(135deg, #7b1fa2, #ab47bc)',
-                color: '#fff',
-                border: 'none',
-                fontWeight: 'bold',
-                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 3px 10px rgba(123,31,162,0.4)'
-              }}
-            >
+            <button onClick={doDiamond} disabled={subscriptionLevel !== 'none'} style={{ padding: '12px 8px', fontSize: '0.95rem', borderRadius: '12px', background: subscriptionLevel === 'diamond' ? '#555' : 'linear-gradient(135deg, #7b1fa2, #ab47bc)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer' }}>
               💎 Diamond 40 WLD
             </button>
           </div>
