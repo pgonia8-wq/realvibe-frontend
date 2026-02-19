@@ -112,27 +112,20 @@ export default function App() {
 
       alertText = type.toUpperCase();
 
-      // Crear match si hay like o super
-      if (type === 'like' || type === 'super') {
-        const { data: existingMatch } = await supabase
+      // Crear match si es like o super
+      if (type === 'super' || type === 'like') {
+        const { data: match } = await supabase
           .from('matches')
           .select('*')
-          .or(`user1_id.eq.${userProfile.id},user2_id.eq.${userProfile.id}`)
+          .or(`user1_id.eq.${userProfile.id},user2_id.eq.${topCard.id}`)
           .limit(1)
           .single();
-
-        let matchId = existingMatch?.id;
-
-        if (!matchId) {
-          const { data: newMatch } = await supabase
-            .from('matches')
-            .insert({ user1_id: userProfile.id, user2_id: topCard.id })
-            .select()
-            .single();
-          matchId = newMatch?.id;
+        if (!match) {
+          const { data: newMatch } = await supabase.from('matches').insert({ user1_id: userProfile.id, user2_id: topCard.id }).select().single();
+          if (newMatch) setCurrentMatchId(newMatch.id);
+        } else {
+          setCurrentMatchId(match.id);
         }
-
-        if (matchId) setCurrentMatchId(matchId);
       }
 
     } else {
@@ -150,38 +143,24 @@ export default function App() {
   };
 
   const openChat = async () => {
-    let matchId = currentMatchId;
-
-    if (!matchId) {
-      const { data: firstMatch } = await supabase
-        .from('matches')
-        .select('*')
-        .or(`user1_id.eq.${userProfile.id},user2_id.eq.${userProfile.id}`)
-        .limit(1)
-        .single();
-
-      if (!firstMatch) {
-        alert('No tienes ningún match aún');
-        return;
-      }
-      matchId = firstMatch.id;
-      setCurrentMatchId(matchId);
+    if (!currentMatchId) {
+      setAlertMessage('No tienes match para chat');
+      setAlertColor('#ff4d4d');
+      setTimeout(()=>setAlertMessage(null),1500);
+      return;
     }
-
     setCurrentScreen('chat');
-
     const { data } = await supabase
       .from('messages')
       .select('*')
-      .eq('match_id', matchId)
+      .eq('match_id', currentMatchId)
       .order('sent_at', { ascending: true });
-
     if (data) setChatMessages(data);
 
-    // Subscripción en tiempo real
+    // Suscripción real-time
     supabase
-      .channel('public:messages')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` }, payload => {
+      .from(`messages:match_id=eq.${currentMatchId}`)
+      .on('INSERT', payload => {
         setChatMessages(prev => [...prev, payload.new as Message]);
       })
       .subscribe();
@@ -196,7 +175,6 @@ export default function App() {
       message: chatInput,
       sent_at: new Date()
     }]).select();
-
     if (data) setChatMessages(prev => [...prev, data[0]]);
     setChatInput('');
   };
@@ -206,12 +184,102 @@ export default function App() {
   return (
     <div style={{backgroundColor:'#6C1A36', minHeight:'100vh', fontFamily:"'Plus Jakarta Sans', sans-serif", color:'#fff', display:'flex', flexDirection:'column', alignItems:'center', padding:'10px', boxSizing:'border-box'}}>
       
+      {/* Botón fijo para abrir chat */}
       <button onClick={openChat} style={{position:'fixed', bottom:'20px', right:'20px', background:'pink', color:'#000', padding:'12px 16px', borderRadius:'50px', zIndex:10000, fontWeight:'700'}}>Chat</button>
       
       {currentScreen === 'home' && (
         <>
-          {/* Código de home, igual que antes */}
-          {/* ... */}
+          <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+            <button onClick={()=>alert('Salir de la app')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>←</button>
+            <h1 style={{margin:0}}>RealVibe 3.0</h1>
+            <button onClick={()=>setCurrentScreen('profileEdit')} style={{background:'transparent', color:'#fff', fontSize:'1.5rem', border:'none', cursor:'pointer'}}>⚙️</button>
+          </div>
+
+          <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: {userProfile.wld}</p>
+
+          <div style={{width:'100%', maxWidth:'400px', flex:1, display:'flex', justifyContent:'center', alignItems:'center', position:'relative'}}>
+            {cards.slice(swipeIndex).map((card, idx) => {
+              const isTop = idx === 0;
+              return (
+                <div key={card.name} style={{
+                  background: 'linear-gradient(90deg,#ff69b4,#8a2be2)',
+                  color:'#000',
+                  borderRadius:'20px',
+                  width:'90%',
+                  minHeight:'480px',
+                  padding:'10px',
+                  position:'absolute',
+                  top:0,
+                  left:'50%',
+                  transform: 'translateX(-50%)' + (isTop
+                    ? swipeDirection === 'left'
+                      ? ' translateX(-150%) rotate(-15deg)'
+                      : swipeDirection === 'right'
+                      ? ' translateX(150%) rotate(15deg)'
+                      : ''
+                    : ' scale(0.95)'),
+                  textAlign:'center',
+                  zIndex: cards.length - idx,
+                  display:'flex',
+                  flexDirection:'column',
+                  justifyContent:'space-between',
+                  transition:'transform 0.3s ease'
+                }}>
+                  <div style={{padding:'5px', borderRadius:'20px'}}>
+                    <img 
+                      src={card.image || 'https://picsum.photos/400/400?random=2'} 
+                      alt={card.name} 
+                      style={{width:'100%', height:'300px', objectFit:'cover', borderRadius:'15px'}} 
+                      onError={(e)=>{(e.target as HTMLImageElement).src='https://picsum.photos/400/400?random=2'}}
+                    />
+                  </div>
+                  <div>
+                    <h2>{card.name}</h2>
+                    <p>{card.description}</p>
+                  </div>
+
+                  {isTop && (
+                    <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
+                      <button onClick={()=>handleSwipe('left','dislike')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
+                      <button onClick={()=>handleSwipe('right','like')} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
+                      <button onClick={()=>handleSwipe('right','super')} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
+                    </div>
+                  )}
+
+                  {isTop && (
+                    <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
+                      {boostActive && <span style={{color:'#fff', fontWeight:'700'}}>Activo 24h</span>}
+                      {!boostActive && <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>}
+                      <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
+                      <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
+                      <button style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {alertMessage && (
+            <div style={{
+              position:'absolute',
+              top:'50%',
+              left:'50%',
+              transform:'translate(-50%,-50%)',
+              padding:'20px 40px',
+              borderRadius:'20px',
+              color:'#fff',
+              fontWeight:'700',
+              fontSize:'1.5rem',
+              background: alertColor,
+              textAlign:'center',
+              zIndex:9999,
+              boxShadow:'0 5px 20px rgba(0,0,0,0.3)',
+              pointerEvents:'none'
+            }}>
+              {alertMessage}
+            </div>
+          )}
         </>
       )}
 
@@ -237,10 +305,25 @@ export default function App() {
 
       {currentScreen === 'profileEdit' && (
         <div style={{background:'#fff', color:'#000', borderRadius:'20px', width:'90%', maxWidth:'400px', padding:'20px', marginTop:'20px', textAlign:'center'}}>
-          {/* Código de edición de perfil, igual que antes */}
-          {/* ... */}
+          <h2>Editar Perfil</h2>
+          <label style={{display:'block', margin:'5px 0'}}>
+            Nombre:
+            <input type="text" value={userProfile.name} onChange={(e)=>setUserProfile({...userProfile,name:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
+          </label>
+          <label style={{display:'block', margin:'5px 0'}}>
+            Descripción:
+            <textarea value={userProfile.description} onChange={(e)=>setUserProfile({...userProfile,description:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
+          </label>
+          <label style={{display:'block', margin:'5px 0'}}>
+            URL de imagen:
+            <input type="text" value={userProfile.image} onChange={(e)=>setUserProfile({...userProfile,image:e.target.value})} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
+          </label>
+          <div style={{display:'flex', justifyContent:'space-between', marginTop:'10px'}}>
+            <button onClick={()=>setCurrentScreen('home')} style={{padding:'10px 16px', borderRadius:'12px'}}>Cancelar</button>
+            <button onClick={()=>saveProfile(userProfile)} style={{padding:'10px 16px', borderRadius:'12px', background:'green', color:'#fff'}}>Guardar</button>
+          </div>
         </div>
       )}
     </div>
-  )
+  );
 }
