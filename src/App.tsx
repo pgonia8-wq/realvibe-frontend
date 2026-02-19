@@ -4,12 +4,23 @@ import { MiniKit } from '@worldcoin/minikit-js';
 export default function App() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);useEffect(() => {
-  if (MiniKit.isInstalled()) {
-    alert('MiniKit DETECTADO correctamente! Puedes conectar.');
-  } else {
-    alert('MiniKit NO detectado aún...');
-  }
+  const checkMiniKit = () => {
+    if (MiniKit.isInstalled()) {
+      alert('MiniKit DETECTADO correctamente! Puedes conectar.');
+    } else {
+      alert('MiniKit NO detectado aún... reintentando en 3s');
+      setTimeout(checkMiniKit, 3000); // reintenta cada 3 segundos
+    }
+  };
+
+  checkMiniKit(); // inicia el chequeo
 }, []);
+  
+  
+
+    
+  
+
 
   // Función para conectar wallet
   const connectWallet = async () => {
