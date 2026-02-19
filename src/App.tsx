@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
-// CONFIGURACIÓN SUPABASE (tus datos reales)
+// === CONFIGURACIÓN SUPABASE (tus datos reales) ===
 const SUPABASE_URL = 'https://bogcdpwnnjxfgfdcewif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvZ2NkcHdubmp4ZmdmZGNld2lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyOTM2MjgsImV4cCI6MjA4Njg2OTYyOH0.65pFiqgEmjogf73mZCG-yT2BZqx6Q8cbA_Ce9RhnIhQ';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -10,7 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
-const TEST_MATCH_ID = '17'; // ← Match real que creaste
+const TEST_MATCH_ID = '17'; // ← Usamos el match real que creaste
 
 type Message = {
   id: number;
@@ -29,7 +29,10 @@ export default function App() {
   const [lastSwipeDate, setLastSwipeDate] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 1, text: 'Hola! ¿Cómo estás?', sender: 'other', time: '02:45' },
+    { id: 2, text: 'Bien, y tú?', sender: 'me', time: '02:46' },
+  ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Cargar swipes gratis desde localStorage
@@ -500,4 +503,4 @@ export default function App() {
       </button>
     </div>
   );
-}
+  }
