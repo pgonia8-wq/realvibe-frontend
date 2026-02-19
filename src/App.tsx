@@ -15,7 +15,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<Profile>({
     name: 'Mi Perfil',
     description: 'Aquí puedes editar tu descripción',
-    image: 'https://picsum.photos/400/400',
+    image: 'https://picsum.photos/400/400?random=1',
   });
 
   const cards: Profile[] = [
@@ -55,7 +55,8 @@ export default function App() {
       display:'flex',
       flexDirection:'column',
       alignItems:'center',
-      padding:'10px'
+      padding:'10px',
+      boxSizing:'border-box'
     }}>
       {currentScreen === 'home' && (
         <>
@@ -69,7 +70,7 @@ export default function App() {
           <p style={{margin:'5px 0'}}>Swipes gratis: 9 | WLD: 0</p>
 
           {/* Tarjeta principal */}
-          <div style={{width:'90%', maxWidth:'400px', minHeight:'500px', position:'relative', display:'flex', justifyContent:'center', alignItems:'center'}}>
+          <div style={{width:'90%', maxWidth:'400px', minHeight:'480px', position:'relative', display:'flex', justifyContent:'center', alignItems:'center'}}>
             {cards.slice(swipeIndex).map((card, idx) => {
               const isTop = idx === 0;
               return (
@@ -86,7 +87,9 @@ export default function App() {
                   right:0,
                   textAlign:'center',
                   zIndex: cards.length - idx,
-                  transition:'transform 0.3s ease',
+                  display:'flex',
+                  flexDirection:'column',
+                  justifyContent:'space-between',
                   transform: isTop
                     ? swipeDirection === 'left'
                       ? 'translateX(-150%) rotate(-15deg)'
@@ -94,17 +97,35 @@ export default function App() {
                       ? 'translateX(150%) rotate(15deg)'
                       : 'translateX(0)'
                     : 'scale(0.95)',
+                  transition:'transform 0.3s ease'
                 }}>
-                  <img src={card.image || 'https://picsum.photos/400/400'} alt={card.name} style={{width:'90%', height:'300px', objectFit:'cover', borderRadius:'15px', margin:'10px auto'}}/>
-                  <h2>{card.name}</h2>
-                  <p>{card.description}</p>
+                  <img 
+                    src={card.image || 'https://picsum.photos/400/400?random=2'} 
+                    alt={card.name} 
+                    style={{width:'90%', height:'300px', objectFit:'cover', borderRadius:'15px', margin:'10px auto'}} 
+                    onError={(e)=>{(e.target as HTMLImageElement).src='https://picsum.photos/400/400?random=2'}}
+                  />
+                  <div>
+                    <h2>{card.name}</h2>
+                    <p>{card.description}</p>
+                  </div>
 
-                  {/* Botones solo en tarjeta superior */}
+                  {/* Botones Like/Dislike/Super */}
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
                       <button onClick={()=>handleSwipe('left')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
                       <button onClick={()=>handleSwipe('right')} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
                       <button onClick={()=>handleSwipe('right')} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
+                    </div>
+                  )}
+
+                  {/* Botones Premium */}
+                  {isTop && (
+                    <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
+                      <button style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>
+                      <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
+                      <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
+                      <button style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
                     </div>
                   )}
                 </div>
@@ -114,6 +135,7 @@ export default function App() {
         </>
       )}
 
+      {/* Pantalla edición de perfil */}
       {currentScreen === 'profileEdit' && (
         <div style={{background:'#fff', color:'#000', borderRadius:'20px', width:'90%', maxWidth:'400px', padding:'20px', marginTop:'20px', textAlign:'center'}}>
           <h2>Editar Perfil</h2>
@@ -137,4 +159,4 @@ export default function App() {
       )}
     </div>
   )
-     }
+}
