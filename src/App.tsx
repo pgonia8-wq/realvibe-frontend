@@ -67,7 +67,6 @@ export default function App() {
     setIsSwiping(true);
 
     const topCard = cards[swipeIndex];
-
     const isSuperUser = userProfile.id === 'pgonia.world.id';
     let canPerform = true;
     let alertText = '';
@@ -154,12 +153,14 @@ export default function App() {
                     : 'scale(0.95)',
                   transition:'transform 0.3s ease'
                 }}>
-                  <img 
-                    src={card.image || 'https://picsum.photos/400/400?random=2'} 
-                    alt={card.name} 
-                    style={{width:'90%', height:'300px', objectFit:'cover', borderRadius:'15px', margin:'10px auto'}} 
-                    onError={(e)=>{(e.target as HTMLImageElement).src='https://picsum.photos/400/400?random=2'}}
-                  />
+                  <div style={{padding:'5px', borderRadius:'20px', background:'linear-gradient(90deg,#ff69b4,#8a2be2)'}}>
+                    <img 
+                      src={card.image || 'https://picsum.photos/400/400?random=2'} 
+                      alt={card.name} 
+                      style={{width:'100%', height:'300px', objectFit:'cover', borderRadius:'15px'}} 
+                      onError={(e)=>{(e.target as HTMLImageElement).src='https://picsum.photos/400/400?random=2'}}
+                    />
+                  </div>
                   <div>
                     <h2>{card.name}</h2>
                     <p>{card.description}</p>
@@ -232,4 +233,4 @@ export default function App() {
       )}
     </div>
   )
-    }
+  }
