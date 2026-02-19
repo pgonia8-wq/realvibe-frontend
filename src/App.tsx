@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 
-// Cambia esto por tu wallet de prueba
+// Cambia esto por tu wallet de prueba donde recibirás los pagos
 const TREASURY_WALLET = '0xTU_DIRECCION_WALLET_AQUI';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
@@ -16,7 +16,7 @@ export default function App() {
   const [lastSwipeDate, setLastSwipeDate] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
 
-  // Cargar estado de swipes desde localStorage al iniciar
+  // Cargar estado de swipes desde localStorage
   useEffect(() => {
     const storedDate = localStorage.getItem('lastSwipeDate');
     const storedSwipes = localStorage.getItem('freeSwipesLeft');
@@ -27,14 +27,13 @@ export default function App() {
         setFreeSwipesLeft(Number(storedSwipes));
         setLastSwipeDate(storedDate);
       } else {
-        // Nuevo día → resetear
+        // Nuevo día → reset
         localStorage.setItem('lastSwipeDate', today);
         localStorage.setItem('freeSwipesLeft', MAX_FREE_SWIPES_PER_DAY.toString());
         setFreeSwipesLeft(MAX_FREE_SWIPES_PER_DAY);
         setLastSwipeDate(today);
       }
     } else {
-      // Primera vez
       const today = new Date().toDateString();
       localStorage.setItem('lastSwipeDate', today);
       localStorage.setItem('freeSwipesLeft', MAX_FREE_SWIPES_PER_DAY.toString());
@@ -114,7 +113,6 @@ export default function App() {
       return showToast('Límite diario alcanzado. Usa Boost o suscripción', 'error');
     }
 
-    // Disminuir swipe gratis solo si no hay boost/suscripción activa
     if (!boostActive && subscriptionLevel === 'none') {
       const newSwipes = freeSwipesLeft - 1;
       setFreeSwipesLeft(newSwipes);
@@ -123,7 +121,7 @@ export default function App() {
     }
 
     showToast(`¡${action.toUpperCase()} enviado!`);
-    // Más adelante: guardar en Supabase y pasar a siguiente perfil
+    // Próximo: guardar en Supabase y pasar perfil
   };
 
   if (currentScreen === 'chat') {
@@ -151,7 +149,7 @@ export default function App() {
       boxSizing: 'border-box',
       position: 'relative'
     }}>
-      {/* Toast flotante */}
+      {/* Toast */}
       {toastMessage && (
         <div style={{
           position: 'fixed',
@@ -160,11 +158,11 @@ export default function App() {
           transform: 'translateX(-50%)',
           padding: '12px 24px',
           borderRadius: '50px',
-          background: toastMessage.type === 'success' ? 'rgba(0,255,0,0.85)' : 'rgba(255,0,0,0.85)',
+          background: toastMessage.type === 'success' ? 'rgba(0,200,0,0.9)' : 'rgba(255,80,80,0.9)',
           color: '#fff',
           fontWeight: 'bold',
           zIndex: 1000,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+          boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
         }}>
           {toastMessage.text}
         </div>
@@ -177,7 +175,7 @@ export default function App() {
       </div>
 
       {walletAddress && (
-        <div style={{ textAlign: 'center', marginBottom: '15px', fontSize: '0.95rem' }}>
+        <div style={{ textAlign: 'center', marginBottom: '20px', fontSize: '0.95rem' }}>
           <p>Wallet: {walletAddress.slice(0,6)}...{walletAddress.slice(-4)}</p>
           <p>Swipes gratis hoy: {freeSwipesLeft} / {MAX_FREE_SWIPES_PER_DAY}</p>
           {subscriptionLevel !== 'none' && (
@@ -211,12 +209,91 @@ export default function App() {
         </div>
       ) : (
         <>
-          {/* Botones de pago */}
-          <div style={{ margin: '20px 0', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px' }}>
-            <button onClick={doBoost} disabled={boostActive} className="pay-btn boost">Boost 1 WLD</button>
-            <button onClick={doGold} disabled={subscriptionLevel !== 'none'} className="pay-btn gold">Gold 10 WLD</button>
-            <button onClick={doPlatinum} disabled={subscriptionLevel !== 'none'} className="pay-btn platinum">Platinum 25 WLD</button>
-            <button onClick={doDiamond} disabled={subscriptionLevel !== 'none'} className="pay-btn diamond">Diamond 40 WLD</button>
+          {/* Botones de pago mejorados con iconos */}
+          <div style={{
+            margin: '25px 0',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '15px',
+            maxWidth: '380px',
+            marginLeft: 'auto',
+            marginRight: 'auto'
+          }}>
+            <button
+              onClick={doBoost}
+              disabled={boostActive}
+              style={{
+                padding: '16px',
+                fontSize: '1.1rem',
+                borderRadius: '16px',
+                background: boostActive ? '#555' : '#ff8c00',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 'bold',
+                cursor: boostActive ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(255,140,0,0.4)',
+                transition: 'all 0.2s'
+              }}
+            >
+              🔥 Boost 1 WLD
+            </button>
+
+            <button
+              onClick={doGold}
+              disabled={subscriptionLevel !== 'none'}
+              style={{
+                padding: '16px',
+                fontSize: '1.1rem',
+                borderRadius: '16px',
+                background: subscriptionLevel === 'gold' ? '#555' : '#ffd700',
+                color: '#000',
+                border: 'none',
+                fontWeight: 'bold',
+                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(255,215,0,0.4)',
+                transition: 'all 0.2s'
+              }}
+            >
+              ⭐ Gold 10 WLD
+            </button>
+
+            <button
+              onClick={doPlatinum}
+              disabled={subscriptionLevel !== 'none'}
+              style={{
+                padding: '16px',
+                fontSize: '1.1rem',
+                borderRadius: '16px',
+                background: subscriptionLevel === 'platinum' ? '#555' : '#c0c0c0',
+                color: '#000',
+                border: 'none',
+                fontWeight: 'bold',
+                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(192,192,192,0.4)',
+                transition: 'all 0.2s'
+              }}
+            >
+              🏆 Platinum 25 WLD
+            </button>
+
+            <button
+              onClick={doDiamond}
+              disabled={subscriptionLevel !== 'none'}
+              style={{
+                padding: '16px',
+                fontSize: '1.1rem',
+                borderRadius: '16px',
+                background: subscriptionLevel === 'diamond' ? '#555' : '#00ffff',
+                color: '#000',
+                border: 'none',
+                fontWeight: 'bold',
+                cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(0,255,255,0.3)',
+                transition: 'all 0.2s'
+              }}
+            >
+              💎 Diamond 40 WLD
+            </button>
           </div>
 
           {/* Tarjeta perfil */}
