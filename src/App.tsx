@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 
-// Cambia esto por tu wallet de prueba donde recibirás los pagos
+// Cambia esto por tu wallet de prueba
 const TREASURY_WALLET = '0xTU_DIRECCION_WALLET_AQUI';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
@@ -27,7 +27,6 @@ export default function App() {
         setFreeSwipesLeft(Number(storedSwipes));
         setLastSwipeDate(storedDate);
       } else {
-        // Nuevo día → reset
         localStorage.setItem('lastSwipeDate', today);
         localStorage.setItem('freeSwipesLeft', MAX_FREE_SWIPES_PER_DAY.toString());
         setFreeSwipesLeft(MAX_FREE_SWIPES_PER_DAY);
@@ -121,7 +120,6 @@ export default function App() {
     }
 
     showToast(`¡${action.toUpperCase()} enviado!`);
-    // Próximo: guardar en Supabase y pasar perfil
   };
 
   if (currentScreen === 'chat') {
@@ -209,12 +207,12 @@ export default function App() {
         </div>
       ) : (
         <>
-          {/* Botones de pago mejorados con iconos */}
+          {/* Botones de pago - más pequeños y con degradados */}
           <div style={{
-            margin: '25px 0',
+            margin: '20px 0',
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
-            gap: '15px',
+            gap: '12px',
             maxWidth: '380px',
             marginLeft: 'auto',
             marginRight: 'auto'
@@ -223,15 +221,15 @@ export default function App() {
               onClick={doBoost}
               disabled={boostActive}
               style={{
-                padding: '16px',
-                fontSize: '1.1rem',
-                borderRadius: '16px',
-                background: boostActive ? '#555' : '#ff8c00',
+                padding: '12px 8px',
+                fontSize: '0.95rem',
+                borderRadius: '12px',
+                background: boostActive ? '#555' : 'linear-gradient(135deg, #ff8c00, #ff4500)',
                 color: '#fff',
                 border: 'none',
                 fontWeight: 'bold',
                 cursor: boostActive ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(255,140,0,0.4)',
+                boxShadow: '0 3px 10px rgba(255,140,0,0.3)',
                 transition: 'all 0.2s'
               }}
             >
@@ -242,15 +240,15 @@ export default function App() {
               onClick={doGold}
               disabled={subscriptionLevel !== 'none'}
               style={{
-                padding: '16px',
-                fontSize: '1.1rem',
-                borderRadius: '16px',
-                background: subscriptionLevel === 'gold' ? '#555' : '#ffd700',
+                padding: '12px 8px',
+                fontSize: '0.95rem',
+                borderRadius: '12px',
+                background: subscriptionLevel === 'gold' ? '#555' : 'linear-gradient(135deg, #b8860b, #ffd700)',
                 color: '#000',
                 border: 'none',
                 fontWeight: 'bold',
                 cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(255,215,0,0.4)',
+                boxShadow: '0 3px 10px rgba(184,134,11,0.4)',
                 transition: 'all 0.2s'
               }}
             >
@@ -261,15 +259,15 @@ export default function App() {
               onClick={doPlatinum}
               disabled={subscriptionLevel !== 'none'}
               style={{
-                padding: '16px',
-                fontSize: '1.1rem',
-                borderRadius: '16px',
-                background: subscriptionLevel === 'platinum' ? '#555' : '#c0c0c0',
+                padding: '12px 8px',
+                fontSize: '0.95rem',
+                borderRadius: '12px',
+                background: subscriptionLevel === 'platinum' ? '#555' : 'linear-gradient(135deg, #a9a9a9, #e0e0e0)',
                 color: '#000',
                 border: 'none',
                 fontWeight: 'bold',
                 cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(192,192,192,0.4)',
+                boxShadow: '0 3px 10px rgba(169,169,169,0.4)',
                 transition: 'all 0.2s'
               }}
             >
@@ -280,15 +278,15 @@ export default function App() {
               onClick={doDiamond}
               disabled={subscriptionLevel !== 'none'}
               style={{
-                padding: '16px',
-                fontSize: '1.1rem',
-                borderRadius: '16px',
-                background: subscriptionLevel === 'diamond' ? '#555' : '#00ffff',
-                color: '#000',
+                padding: '12px 8px',
+                fontSize: '0.95rem',
+                borderRadius: '12px',
+                background: subscriptionLevel === 'diamond' ? '#555' : 'linear-gradient(135deg, #7b1fa2, #ab47bc)',
+                color: '#fff',
                 border: 'none',
                 fontWeight: 'bold',
                 cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(0,255,255,0.3)',
+                boxShadow: '0 3px 10px rgba(123,31,162,0.4)',
                 transition: 'all 0.2s'
               }}
             >
@@ -296,44 +294,62 @@ export default function App() {
             </button>
           </div>
 
-          {/* Tarjeta perfil */}
+          {/* Tarjeta perfil - más grande para la foto */}
           <div style={{
             background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
             borderRadius: '24px',
             padding: '20px',
-            margin: '0 auto',
-            maxWidth: '380px',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+            margin: '0 auto 30px auto',
+            maxWidth: '420px',  // más ancho
+            boxShadow: '0 12px 35px rgba(0,0,0,0.5)',
             textAlign: 'center'
           }}>
-            <img 
-              src="https://placekitten.com/400/500" 
-              alt="Perfil" 
-              style={{ width: '100%', borderRadius: '16px', marginBottom: '15px', boxShadow: '0 5px 15px rgba(0,0,0,0.3)' }}
-            />
-            <h2 style={{ margin: '10px 0', fontSize: '1.6rem' }}>José</h2>
-            <p style={{ margin: '8px 0', fontSize: '1.1rem' }}>Amante de la música</p>
-            <p style={{ fontSize: '0.95rem', opacity: 0.9 }}>CDMX • 24 años</p>
+            <div style={{ overflow: 'hidden', borderRadius: '18px', marginBottom: '15px' }}>
+              <img 
+                src="https://placekitten.com/450/600" 
+                alt="Perfil" 
+                style={{ width: '100%', height: 'auto', display: 'block' }}  // imagen más grande
+              />
+            </div>
+            <h2 style={{ margin: '12px 0', fontSize: '1.7rem' }}>José</h2>
+            <p style={{ margin: '8px 0', fontSize: '1.15rem' }}>Amante de la música</p>
+            <p style={{ fontSize: '0.98rem', opacity: 0.9 }}>CDMX • 24 años</p>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '25px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '25px', marginTop: '30px' }}>
               <button 
                 onClick={() => handleAction('dislike')}
                 disabled={freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none'}
-                style={{ padding: '14px 30px', background: '#555', borderRadius: '50px', color: '#fff', border: 'none', fontSize: '1.1rem' }}
+                style={{ 
+                  padding: '14px 35px', 
+                  background: '#555', 
+                  borderRadius: '50px', 
+                  color: '#fff', 
+                  border: 'none', 
+                  fontSize: '1.1rem',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                }}
               >
                 Dislike
               </button>
               <button 
                 onClick={() => handleAction('like')}
                 disabled={freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none'}
-                style={{ padding: '14px 40px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', borderRadius: '50px', color: '#fff', border: 'none', fontSize: '1.1rem' }}
+                style={{ 
+                  padding: '14px 45px', 
+                  background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', 
+                  borderRadius: '50px', 
+                  color: '#fff', 
+                  border: 'none', 
+                  fontSize: '1.1rem',
+                  boxShadow: '0 4px 12px rgba(255,105,180,0.4)'
+                }}
               >
                 Like
               </button>
             </div>
           </div>
 
-          <p style={{ textAlign: 'center', marginTop: '30px', opacity: 0.8 }}>Próximamente: más perfiles y chat realtime</p>
+          <p style={{ textAlign: 'center', marginTop: '20px', opacity: 0.8 }}>Próximamente: más perfiles y chat realtime</p>
         </>
       )}
 
