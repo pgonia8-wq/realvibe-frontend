@@ -139,11 +139,11 @@ export default function App() {
     }, 500);
   };
 
-  // CORRECCIÓN: botón de chat siempre abre la ventana aunque no haya match
+  // Botón de chat siempre abre la ventana
   const openChat = async () => {
-    setCurrentScreen('chat'); // abre la ventana siempre
+    setCurrentScreen('chat');
     if (!currentMatchId) {
-      setChatMessages([]); // chat vacío si no hay match
+      setChatMessages([]); // no hay match aún
       return;
     }
 
@@ -276,13 +276,17 @@ export default function App() {
         <div style={{width:'100%', maxWidth:'400px', flex:1, display:'flex', flexDirection:'column', gap:'5px'}}>
           <h2 style={{textAlign:'center'}}>Chat</h2>
           <div style={{flex:1, overflowY:'auto', border:'2px solid #ff69b4', borderRadius:'12px', padding:'10px', background:'#fff', color:'#000'}}>
-            {chatMessages.map((msg) => (
-              <div key={msg.id} style={{textAlign: msg.sender_id === userProfile.id ? 'right' : 'left'}}>
-                <span style={{background: msg.sender_id === userProfile.id ? '#ff69b4' : '#00bfff', padding:'5px 10px', borderRadius:'12px', display:'inline-block', margin:'2px 0', color:'#fff'}}>
-                  {msg.message}
-                </span>
-              </div>
-            ))}
+            {chatMessages.length === 0 ? (
+              <p style={{textAlign:'center', color:'#888', marginTop:'50%'}}>No tienes match todavía</p>
+            ) : (
+              chatMessages.map((msg) => (
+                <div key={msg.id} style={{textAlign: msg.sender_id === userProfile.id ? 'right' : 'left'}}>
+                  <span style={{background: msg.sender_id === userProfile.id ? '#ff69b4' : '#00bfff', padding:'5px 10px', borderRadius:'12px', display:'inline-block', margin:'2px 0', color:'#fff'}}>
+                    {msg.message}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
           <div style={{display:'flex', gap:'5px', marginTop:'5px'}}>
             <input style={{flex:1, padding:'8px', borderRadius:'12px'}} value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="Escribe un mensaje"/>
@@ -315,4 +319,4 @@ export default function App() {
       )}
     </div>
   )
-    }
+}
