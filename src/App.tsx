@@ -11,6 +11,8 @@ export default function App() {
   const [isSwiping, setIsSwiping] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [currentScreen, setCurrentScreen] = useState<'home' | 'profileEdit'>('home');
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [alertColor, setAlertColor] = useState<string>('');
 
   const [userProfile, setUserProfile] = useState<Profile>({
     name: 'Mi Perfil',
@@ -35,15 +37,23 @@ export default function App() {
     setCurrentScreen('home');
   };
 
-  const handleSwipe = (direction: 'left' | 'right') => {
+  const handleSwipe = (direction: 'left' | 'right', type: 'dislike' | 'like' | 'super') => {
     if (isSwiping) return;
     setSwipeDirection(direction);
     setIsSwiping(true);
+
+    // Alerta bonita tipo Tinder
+    if (type === 'dislike') setAlertColor('#888');
+    if (type === 'like') setAlertColor('linear-gradient(90deg,#ff69b4,#8a2be2)');
+    if (type === 'super') setAlertColor('linear-gradient(90deg,#00bfff,#1e90ff)');
+    setAlertMessage(type.toUpperCase());
+
     setTimeout(() => {
       setSwipeIndex((prev) => (prev < cards.length - 1 ? prev + 1 : 0));
       setSwipeDirection(null);
       setIsSwiping(false);
-    }, 300);
+      setAlertMessage(null);
+    }, 500);
   };
 
   return (
@@ -75,8 +85,8 @@ export default function App() {
               const isTop = idx === 0;
               return (
                 <div key={card.name} style={{
-                  background:'#fff',
-                  color:'#000',
+                  background: isTop ? '#fff' : 'linear-gradient(90deg,#ff69b4,#8a2be2)', // degradado divertido para la tarjeta de fondo
+                  color:isTop ? '#000' : '#fff',
                   borderRadius:'20px',
                   width:'100%',
                   minHeight:'480px',
@@ -113,9 +123,9 @@ export default function App() {
                   {/* Botones Like/Dislike/Super */}
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
-                      <button onClick={()=>handleSwipe('left')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
-                      <button onClick={()=>handleSwipe('right')} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
-                      <button onClick={()=>handleSwipe('right')} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
+                      <button onClick={()=>handleSwipe('left','dislike')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
+                      <button onClick={()=>handleSwipe('right','like')} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
+                      <button onClick={()=>handleSwipe('right','super')} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
                     </div>
                   )}
 
@@ -132,6 +142,28 @@ export default function App() {
               )
             })}
           </div>
+
+          {/* Alerta tipo Tinder */}
+          {alertMessage && (
+            <div style={{
+              position:'absolute',
+              top:'50%',
+              left:'50%',
+              transform:'translate(-50%,-50%)',
+              padding:'20px 40px',
+              borderRadius:'20px',
+              color:'#fff',
+              fontWeight:'700',
+              fontSize:'1.5rem',
+              background: alertColor,
+              textAlign:'center',
+              zIndex:9999,
+              boxShadow:'0 5px 20px rgba(0,0,0,0.3)',
+              pointerEvents:'none'
+            }}>
+              {alertMessage}
+            </div>
+          )}
         </>
       )}
 
@@ -159,4 +191,4 @@ export default function App() {
       )}
     </div>
   )
-}
+    }
