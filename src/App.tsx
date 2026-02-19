@@ -10,7 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
-const TEST_MATCH_ID = '17'; // ¡Aquí está el cambio! Usamos el ID real de tu match
+const TEST_MATCH_ID = '17'; // ← Match real que creaste
 
 type Message = {
   id: number;
@@ -106,7 +106,7 @@ export default function App() {
     };
   }, [currentScreen, walletAddress]);
 
-  // Scroll automático al final
+  // Scroll automático
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
