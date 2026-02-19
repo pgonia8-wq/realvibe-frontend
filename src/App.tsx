@@ -100,7 +100,6 @@ export default function App() {
         const boostExpiry = new Date();
         boostExpiry.setHours(boostExpiry.getHours() + 24);
         setUserProfile(prev => ({ ...prev, boostActiveUntil: boostExpiry.toISOString() }));
-        await supabase.from('profiles').update({ boost_active_until: boostExpiry.toISOString() }).eq('id', userProfile.id);
       }
 
       registerAction(topCard, type);
@@ -113,15 +112,21 @@ export default function App() {
       alertText = type.toUpperCase();
 
       if (type === 'super' || type === 'like') {
-        const { data: match } = await supabase
+        const { data: existingMatch } = await supabase
           .from('matches')
           .select('*')
           .or(`user1_id.eq.${userProfile.id},user2_id.eq.${topCard.id}`)
           .limit(1)
           .single();
-        if (!match) {
-          const { data: newMatch } = await supabase.from('matches').insert({ user1_id: userProfile.id, user2_id: topCard.id }).select().single();
+
+        if (!existingMatch) {
+          const { data: newMatch } = await supabase.from('matches')
+            .insert({ user1_id: userProfile.id, user2_id: topCard.id })
+            .select()
+            .single();
           if (newMatch) setCurrentMatchId(newMatch.id);
+        } else {
+          setCurrentMatchId(existingMatch.id);
         }
       }
 
@@ -139,19 +144,28 @@ export default function App() {
     }, 500);
   };
 
-  // Botón de chat siempre abre la ventana
   const openChat = async () => {
-    setCurrentScreen('chat');
+    // Busca el primer match existente si no hay uno activo
     if (!currentMatchId) {
-      setChatMessages([]); // no hay match aún
-      return;
+      const { data: firstMatch } = await supabase
+        .from('matches')
+        .select('*')
+        .or(`user1_id.eq.${userProfile.id},user2_id.eq.${userProfile.id}`)
+        .limit(1)
+        .single();
+
+      if (firstMatch) setCurrentMatchId(firstMatch.id);
     }
 
+    if (!currentMatchId) return; // Si no hay match, no abre
+
+    setCurrentScreen('chat');
     const { data } = await supabase
       .from('messages')
       .select('*')
       .eq('match_id', currentMatchId)
       .order('sent_at', { ascending: true });
+
     if (data) setChatMessages(data);
   };
 
@@ -163,7 +177,8 @@ export default function App() {
       receiver_id: cards[swipeIndex]?.id || 'unknown',
       message: chatInput,
       sent_at: new Date()
-    }]);
+    }]).select();
+
     if (data) setChatMessages(prev => [...prev, data[0]]);
     setChatInput('');
   };
@@ -172,9 +187,9 @@ export default function App() {
 
   return (
     <div style={{backgroundColor:'#6C1A36', minHeight:'100vh', fontFamily:"'Plus Jakarta Sans', sans-serif", color:'#fff', display:'flex', flexDirection:'column', alignItems:'center', padding:'10px', boxSizing:'border-box'}}>
-      
+
       <button onClick={openChat} style={{position:'fixed', bottom:'20px', right:'20px', background:'pink', color:'#000', padding:'12px 16px', borderRadius:'50px', zIndex:10000, fontWeight:'700'}}>Chat</button>
-      
+
       {currentScreen === 'home' && (
         <>
           <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
@@ -236,9 +251,8 @@ export default function App() {
 
                   {isTop && (
                     <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
-                      <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>
-                        Boost 1 WLD {boostActive && '(Activo 24h)'}
-                      </button>
+                      {boostActive && <button style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Activo 24h</button>}
+                      {!boostActive && <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>}
                       <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
                       <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
                       <button style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
@@ -276,17 +290,13 @@ export default function App() {
         <div style={{width:'100%', maxWidth:'400px', flex:1, display:'flex', flexDirection:'column', gap:'5px'}}>
           <h2 style={{textAlign:'center'}}>Chat</h2>
           <div style={{flex:1, overflowY:'auto', border:'2px solid #ff69b4', borderRadius:'12px', padding:'10px', background:'#fff', color:'#000'}}>
-            {chatMessages.length === 0 ? (
-              <p style={{textAlign:'center', color:'#888', marginTop:'50%'}}>No tienes match todavía</p>
-            ) : (
-              chatMessages.map((msg) => (
-                <div key={msg.id} style={{textAlign: msg.sender_id === userProfile.id ? 'right' : 'left'}}>
-                  <span style={{background: msg.sender_id === userProfile.id ? '#ff69b4' : '#00bfff', padding:'5px 10px', borderRadius:'12px', display:'inline-block', margin:'2px 0', color:'#fff'}}>
-                    {msg.message}
-                  </span>
-                </div>
-              ))
-            )}
+            {chatMessages.map((msg) => (
+              <div key={msg.id} style={{textAlign: msg.sender_id === userProfile.id ? 'right' : 'left'}}>
+                <span style={{background: msg.sender_id === userProfile.id ? '#ff69b4' : '#00bfff', padding:'5px 10px', borderRadius:'12px', display:'inline-block', margin:'2px 0', color:'#fff'}}>
+                  {msg.message}
+                </span>
+              </div>
+            ))}
           </div>
           <div style={{display:'flex', gap:'5px', marginTop:'5px'}}>
             <input style={{flex:1, padding:'8px', borderRadius:'12px'}} value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="Escribe un mensaje"/>
