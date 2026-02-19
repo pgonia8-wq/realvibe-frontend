@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 type Profile = {
   id: string;
   name: string;
   description: string;
+  image: string;
   wld: number;
   subscriptionActive: boolean;
   boostActiveUntil?: string;
-  photos?: string[];
-  image?: string;
 };
 
 type Message = {
-  id: number;
-  match_id: number;
+  id: string;
+  match_id: string;
   sender_id: string;
   receiver_id: string;
   message: string;
@@ -23,7 +22,7 @@ type Message = {
 
 const supabaseUrl = 'https://YOUR_PROJECT.supabase.co';
 const supabaseKey = 'YOUR_ANON_KEY';
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function App() {
   const [swipeIndex, setSwipeIndex] = useState(0);
@@ -34,7 +33,7 @@ export default function App() {
   const [alertColor, setAlertColor] = useState<string>('');
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [currentMatchId, setCurrentMatchId] = useState<number | null>(null);
+  const [currentMatchId, setCurrentMatchId] = useState<string>('');
 
   const [userProfile, setUserProfile] = useState<Profile>({
     id: 'pgonia.world.id',
@@ -42,8 +41,7 @@ export default function App() {
     description: 'Aquí puedes editar tu descripción',
     image: 'https://picsum.photos/400/400?random=1',
     wld: 100,
-    subscriptionActive: true,
-    photos: []
+    subscriptionActive: true
   });
 
   const cards: Profile[] = [
@@ -52,7 +50,6 @@ export default function App() {
     { id:'3', name: 'Alex', description: 'Aventurero y divertido', image: 'https://placekitten.com/402/400', wld:0, subscriptionActive:false },
   ];
 
-  // --------- Guardar perfil local ----------
   useEffect(() => {
     const stored = localStorage.getItem('userProfile');
     if (stored) setUserProfile(JSON.parse(stored));
@@ -64,7 +61,6 @@ export default function App() {
     setCurrentScreen('home');
   };
 
-  // --------- Registrar acción ----------
   const registerAction = async (targetProfile: Profile, actionType: string) => {
     try {
       await supabase.from('actions').insert({
@@ -78,7 +74,6 @@ export default function App() {
     }
   };
 
-  // --------- Swipe ----------
   const handleSwipe = async (direction: 'left' | 'right', type: 'dislike' | 'like' | 'super' | 'boost') => {
     if (isSwiping) return;
     setSwipeDirection(direction);
@@ -117,7 +112,7 @@ export default function App() {
 
       alertText = type.toUpperCase();
 
-      // Generar match si like o super
+      // Crear match si Like o Super
       if (type === 'super' || type === 'like') {
         const { data: match } = await supabase
           .from('matches')
@@ -132,7 +127,6 @@ export default function App() {
           setCurrentMatchId(match.id);
         }
       }
-
     } else {
       setAlertColor('#ff4d4d');
     }
@@ -147,7 +141,6 @@ export default function App() {
     }, 500);
   };
 
-  // --------- Chat ----------
   const openChat = async () => {
     if (!currentMatchId) {
       alert('No tienes Match para chat');
@@ -156,14 +149,6 @@ export default function App() {
     setCurrentScreen('chat');
     const { data } = await supabase.from('messages').select('*').eq('match_id', currentMatchId).order('sent_at', { ascending: true });
     if (data) setChatMessages(data);
-
-    // Suscripción real-time
-    supabase
-      .from(`messages:match_id=eq.${currentMatchId}`)
-      .on('INSERT', payload => {
-        setChatMessages(prev => [...prev, payload.new as Message]);
-      })
-      .subscribe();
   };
 
   const sendMessage = async () => {
@@ -181,19 +166,13 @@ export default function App() {
 
   const boostActive = userProfile.boostActiveUntil ? new Date(userProfile.boostActiveUntil) > new Date() : false;
 
-  // --------- Subida de fotos ----------
-  const uploadPhoto = async (file: File) => {
-    if (!file) return;
-    const fileName = `${userProfile.id}/${file.name}`;
-    const { data, error } = await supabase.storage.from('user-photos').upload(fileName, file, { upsert: true });
-    if (!error) {
-      const url = supabase.storage.from('user-photos').getPublicUrl(fileName).publicUrl;
-      setUserProfile(prev => ({ ...prev, photos: [...(prev.photos||[]), url] }));
-    }
-  };
-
   return (
     <div style={{backgroundColor:'#6C1A36', minHeight:'100vh', fontFamily:"'Plus Jakarta Sans', sans-serif", color:'#fff', display:'flex', flexDirection:'column', alignItems:'center', padding:'10px', boxSizing:'border-box'}}>
+      
+      <button onClick={openChat} style={{position:'fixed', bottom:'20px', right:'20px', background:'pink', color:'#000', padding:'12px 16px', borderRadius:'50px', zIndex:10000, fontWeight:'700'}}>
+        Chat
+      </button>
+
       {currentScreen === 'home' && (
         <>
           <div style={{width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
@@ -208,7 +187,7 @@ export default function App() {
             {cards.slice(swipeIndex).map((card, idx) => {
               const isTop = idx === 0;
               return (
-                <div key={card.id} style={{
+                <div key={card.name} style={{
                   background: 'linear-gradient(90deg,#ff69b4,#8a2be2)',
                   color:'#000',
                   borderRadius:'20px',
@@ -232,43 +211,41 @@ export default function App() {
                   justifyContent:'space-between',
                   transition:'transform 0.3s ease'
                 }}>
-                  <img 
-                    src={card.image} 
-                    alt={card.name} 
-                    style={{width:'100%', height:'300px', objectFit:'cover', borderRadius:'15px'}} 
-                    onError={(e)=>{(e.target as HTMLImageElement).src='https://picsum.photos/400/400'}}
-                  />
+                  <div style={{padding:'5px', borderRadius:'20px'}}>
+                    <img 
+                      src={card.image || 'https://picsum.photos/400/400?random=2'} 
+                      alt={card.name} 
+                      style={{width:'100%', height:'300px', objectFit:'cover', borderRadius:'15px'}} 
+                      onError={(e)=>{(e.target as HTMLImageElement).src='https://picsum.photos/400/400?random=2'}}
+                    />
+                  </div>
                   <div>
                     <h2>{card.name}</h2>
                     <p>{card.description}</p>
                   </div>
 
                   {isTop && (
-                    <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
-                      <button onClick={()=>handleSwipe('left','dislike')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
-                      <button onClick={()=>handleSwipe('right','like')} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
-                      <button onClick={()=>handleSwipe('right','super')} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
-                    </div>
-                  )}
+                    <>
+                      <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'10px'}}>
+                        <button onClick={()=>handleSwipe('left','dislike')} style={{background:'#888', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Dislike</button>
+                        <button onClick={()=>handleSwipe('right','like')} style={{background:'linear-gradient(90deg,#ff69b4,#8a2be2)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Like</button>
+                        <button onClick={()=>handleSwipe('right','super')} style={{background:'linear-gradient(90deg,#00bfff,#1e90ff)', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Super</button>
+                      </div>
 
-                  {isTop && (
-                    <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
-                      {!boostActive &&
-                        <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>
-                          Boost 1 WLD
-                        </button>
-                      }
-                      {boostActive && <span style={{color:'#fff', fontWeight:'700'}}>Activo 24h</span>}
-                    </div>
+                      <div style={{display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginTop:'15px'}}>
+                        {!boostActive && <button onClick={()=>handleSwipe('right','boost')} style={{background:'orange', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Boost 1 WLD</button>}
+                        {boostActive && <span style={{color:'#fff', fontWeight:'700'}}>Activo 24h</span>}
+                        <button style={{background:'gold', color:'#fff', padding:'10px 16px', borderRadius:'12px'}}>Gold 10 WLD</button>
+                        <button style={{background:'silver', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Platinum 25 WLD</button>
+                        <button style={{background:'cyan', color:'#000', padding:'10px 16px', borderRadius:'12px'}}>Diamond 40 WLD</button>
+                      </div>
+                    </>
                   )}
                 </div>
               )
             })}
           </div>
 
-          {/* Botón Chat */}
-          {currentMatchId && <button onClick={openChat} style={{position:'fixed', bottom:'20px', right:'20px', background:'pink', color:'#000', padding:'12px 16px', borderRadius:'50px', zIndex:10000, fontWeight:'700'}}>Chat</button>}
-          
           {alertMessage && (
             <div style={{
               position:'absolute',
@@ -296,6 +273,7 @@ export default function App() {
         <div style={{width:'100%', maxWidth:'400px', flex:1, display:'flex', flexDirection:'column', gap:'5px'}}>
           <h2 style={{textAlign:'center'}}>Chat</h2>
           <div style={{flex:1, overflowY:'auto', border:'2px solid #ff69b4', borderRadius:'12px', padding:'10px', background:'#fff', color:'#000'}}>
+            {chatMessages.length === 0 && <p style={{textAlign:'center', color:'#888'}}>No tienes mensajes</p>}
             {chatMessages.map((msg) => (
               <div key={msg.id} style={{textAlign: msg.sender_id === userProfile.id ? 'right' : 'left'}}>
                 <span style={{background: msg.sender_id === userProfile.id ? '#ff69b4' : '#00bfff', padding:'5px 10px', borderRadius:'12px', display:'inline-block', margin:'2px 0', color:'#fff'}}>
@@ -325,7 +303,12 @@ export default function App() {
           </label>
           <label style={{display:'block', margin:'5px 0'}}>
             Foto de perfil:
-            <input type="file" accept="image/*" onChange={e=>uploadPhoto(e.target.files![0])} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
+            <input type="file" accept="image/*" onChange={async (e)=>{
+              if (!e.target.files?.[0]) return;
+              const file = e.target.files[0];
+              const { data, error } = await supabase.storage.from('profile-photos').upload(`${userProfile.id}-${Date.now()}`, file, {cacheControl: '3600', upsert: true});
+              if (!error && data) setUserProfile({...userProfile, image: supabase.storage.from('profile-photos').getPublicUrl(data.path).publicURL || userProfile.image});
+            }} style={{width:'100%', padding:'8px', margin:'5px 0'}}/>
           </label>
           <div style={{display:'flex', justifyContent:'space-between', marginTop:'10px'}}>
             <button onClick={()=>setCurrentScreen('home')} style={{padding:'10px 16px', borderRadius:'12px'}}>Cancelar</button>
@@ -335,4 +318,4 @@ export default function App() {
       )}
     </div>
   )
-    }
+}
