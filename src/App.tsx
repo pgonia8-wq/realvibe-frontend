@@ -10,13 +10,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
+const TEST_MATCH_ID = '17'; // ¡Aquí está el cambio! Usamos el ID real de tu match
 
 type Message = {
-  id: string;
+  id: number;
   text: string;
-  sender_id: string;
-  created_at: string;
   sender: 'me' | 'other';
+  time: string;
 };
 
 export default function App() {
@@ -30,10 +30,9 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [matchId, setMatchId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar swipes gratis
+  // Cargar swipes gratis desde localStorage
   useEffect(() => {
     const storedDate = localStorage.getItem('lastSwipeDate');
     const storedSwipes = localStorage.getItem('freeSwipesLeft');
@@ -57,44 +56,15 @@ export default function App() {
     }
   }, []);
 
-  // Buscar match_id real al conectar wallet
+  // Cargar mensajes desde Supabase + realtime
   useEffect(() => {
-    if (!walletAddress) return;
-
-    const findMatch = async () => {
-      const { data, error } = await supabase
-        .from('matches')
-        .select('id')
-        .or(`user1_id.eq.\( {walletAddress},user2_id.eq. \){walletAddress}`)
-        .limit(1)
-        .single();
-
-      if (error) {
-        console.error('Error buscando match:', error);
-        showToast('No se encontró match. Crea uno primero', 'error');
-        return;
-      }
-
-      if (data) {
-        setMatchId(data.id.toString());
-        showToast('Match encontrado');
-      } else {
-        showToast('No tienes matches aún', 'error');
-      }
-    };
-
-    findMatch();
-  }, [walletAddress]);
-
-  // Realtime y carga de mensajes solo si hay match_id
-  useEffect(() => {
-    if (currentScreen !== 'chat' || !walletAddress || !matchId) return;
+    if (currentScreen !== 'chat' || !walletAddress) return;
 
     const loadMessages = async () => {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('match_id', matchId)
+        .eq('match_id', TEST_MATCH_ID)
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -105,7 +75,8 @@ export default function App() {
 
       const mapped = data.map(msg => ({
         ...msg,
-        sender: msg.sender_id === walletAddress ? 'me' : 'other'
+        sender: msg.sender_id === walletAddress ? 'me' : 'other',
+        time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }));
       setMessages(mapped);
     };
@@ -113,15 +84,17 @@ export default function App() {
     loadMessages();
 
     const channel = supabase
-      .channel(`messages:${matchId}`)
+      .channel(`messages:${TEST_MATCH_ID}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${TEST_MATCH_ID}` },
         (payload) => {
-          const newMsg = payload.new as Message;
+          const newMsg = payload.new;
           const mappedMsg = {
-            ...newMsg,
-            sender: newMsg.sender_id === walletAddress ? 'me' : 'other'
+            id: messages.length + 1,
+            text: newMsg.text,
+            sender: newMsg.sender_id === walletAddress ? 'me' : 'other',
+            time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           setMessages(prev => [...prev, mappedMsg]);
         }
@@ -131,9 +104,9 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentScreen, walletAddress, matchId]);
+  }, [currentScreen, walletAddress]);
 
-  // Scroll automático
+  // Scroll automático al final
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -221,10 +194,7 @@ export default function App() {
   };
 
   const sendMessage = () => {
-    if (!chatInput.trim() || !walletAddress) {
-      showToast('Escribe algo primero', 'error');
-      return;
-    }
+    if (!chatInput.trim()) return;
 
     const newMsg: Message = {
       id: messages.length + 1,
@@ -357,7 +327,6 @@ export default function App() {
     );
   }
 
-  // Resto de la app (home con swipe, pagos, etc.)
   return (
     <div style={{
       backgroundColor: '#6C1A36',
