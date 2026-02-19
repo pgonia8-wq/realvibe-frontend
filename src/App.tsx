@@ -1,23 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
-import { createClient } from '@supabase/supabase-js';
-
-// === CONFIGURACIÓN SUPABASE (tus datos reales) ===
-const SUPABASE_URL = 'https://bogcdpwnnjxfgfdcewif.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvZ2NkcHdubmp4ZmdmZGNld2lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyOTM2MjgsImV4cCI6MjA4Njg2OTYyOH0.65pFiqgEmjogf73mZCG-yT2BZqx6Q8cbA_Ce9RhnIhQ';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
-const TEST_MATCH_ID = 'test-chat-001';
 
 type Message = {
-  id: string;
+  id: number;
   text: string;
-  sender_id: string;
-  created_at: string;
   sender: 'me' | 'other';
+  time: string;
 };
 
 export default function App() {
@@ -30,10 +22,13 @@ export default function App() {
   const [lastSwipeDate, setLastSwipeDate] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 1, text: 'Hola! ¿Cómo estás?', sender: 'other', time: '02:45' },
+    { id: 2, text: 'Bien, y tú?', sender: 'me', time: '02:46' },
+  ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar swipes gratis
+  // Cargar swipes gratis desde localStorage
   useEffect(() => {
     const storedDate = localStorage.getItem('lastSwipeDate');
     const storedSwipes = localStorage.getItem('freeSwipesLeft');
@@ -57,54 +52,7 @@ export default function App() {
     }
   }, []);
 
-  // Realtime chat con Supabase
-  useEffect(() => {
-    if (currentScreen !== 'chat' || !walletAddress) return;
-
-    const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('match_id', TEST_MATCH_ID)
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('Error cargando mensajes:', error);
-        showToast('Error al cargar chat', 'error');
-        return;
-      }
-
-      const mapped = data.map(msg => ({
-        ...msg,
-        sender: msg.sender_id === walletAddress ? 'me' : 'other'
-      }));
-      setMessages(mapped);
-    };
-
-    loadMessages();
-
-    const channel = supabase
-      .channel(`messages:${TEST_MATCH_ID}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${TEST_MATCH_ID}` },
-        (payload) => {
-          const newMsg = payload.new as Message;
-          const mappedMsg = {
-            ...newMsg,
-            sender: newMsg.sender_id === walletAddress ? 'me' : 'other'
-          };
-          setMessages(prev => [...prev, mappedMsg]);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentScreen, walletAddress]);
-
-  // Scroll automático
+  // Scroll automático al final
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -192,27 +140,17 @@ export default function App() {
   };
 
   const sendMessage = () => {
-    if (!chatInput.trim() || !walletAddress) {
-      showToast('Escribe algo primero', 'error');
-      return;
-    }
+    if (!chatInput.trim()) return;
 
-    const newMsg = {
-      match_id: TEST_MATCH_ID,
-      sender_id: walletAddress,
+    const newMsg: Message = {
+      id: messages.length + 1,
       text: chatInput.trim(),
+      sender: 'me',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    supabase.from('messages').insert(newMsg)
-      .then(({ error }) => {
-        if (error) {
-          console.error('Error al enviar:', error);
-          showToast('Error al enviar mensaje', 'error');
-        } else {
-          setChatInput('');
-          showToast('Mensaje enviado');
-        }
-      });
+    setMessages([...messages, newMsg]);
+    setChatInput('');
   };
 
   if (currentScreen === 'chat') {
@@ -290,7 +228,7 @@ export default function App() {
                   marginTop: '6px', 
                   textAlign: msg.sender === 'me' ? 'right' : 'left' 
                 }}>
-                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {msg.time}
                 </div>
               </div>
             </div>
@@ -345,7 +283,7 @@ export default function App() {
       boxSizing: 'border-box',
       position: 'relative'
     }}>
-      {/* Toast */}
+      {/* Toast flotante */}
       {toastMessage && (
         <div style={{
           position: 'fixed',
@@ -508,4 +446,4 @@ export default function App() {
       </button>
     </div>
   );
-         }
+}
