@@ -191,26 +191,32 @@ export default function App() {
 
     showToast(`¡${action.toUpperCase()} enviado!`);
   };
+const sendMessage = async () => {
+  if (!chatInput.trim() || !walletAddress) {
+    showToast('Escribe algo primero', 'error');
+    return;
+  }
 
-  const sendMessage = async () => {
-    if (!chatInput.trim() || !walletAddress) return;
+  const newMsg = {
+    match_id: TEST_MATCH_ID,
+    sender_id: walletAddress,
+    text: chatInput.trim(),
+  };
 
-    const newMsg = {
-      match_id: TEST_MATCH_ID,
-      sender_id: walletAddress,
-      text: chatInput.trim(),
-    };
-
+  try {
     const { error } = await supabase.from('messages').insert(newMsg);
 
-    if (error) {
-      console.error('Error al enviar:', error);
-      showToast('Error al enviar mensaje', 'error');
-      return;
-    }
+    if (error) throw error;
 
     setChatInput('');
-  };
+    showToast('Mensaje enviado');
+  } catch (error) {
+    console.error('Error al enviar:', error);
+    showToast('Error al enviar mensaje', 'error');
+  }
+};
+
+  
 
   if (currentScreen === 'chat') {
     return (
