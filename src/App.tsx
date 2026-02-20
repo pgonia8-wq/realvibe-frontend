@@ -12,6 +12,7 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
 const MAX_FREE_SWIPES_PER_DAY = 10;
 const MAX_MESSAGE_LENGTH = 500;
 
+// Tipos
 type SubscriptionLevel = 'none' | 'gold' | 'platinum' | 'diamond';
 
 type Message = {
@@ -92,10 +93,11 @@ export default function RealVibeApp() {
     );
   }, [profiles, myMatches, seenWallets]);
 
-  const topProfile = useMemo(() => {
-    if (availableProfiles.length === 0) return null;
-    return availableProfiles[discoverIndex % availableProfiles.length];
+  const visibleProfiles = useMemo(() => {
+    return availableProfiles.slice(discoverIndex, discoverIndex + 3);
   }, [availableProfiles, discoverIndex]);
+
+  const topProfile = visibleProfiles[0] || null;
 
   // ────────────────────────────────────────────────
   // Inicialización
@@ -141,11 +143,7 @@ export default function RealVibeApp() {
       .eq('wallet_address', walletAddress)
       .single();
 
-    if (error) {
-      console.error('Error cargando perfil:', error);
-      return;
-    }
-
+    if (error) console.error('Error cargando perfil:', error);
     setSubscriptionLevel((data?.subscription as SubscriptionLevel) || 'none');
     const until = data?.boost_until ? new Date(data.boost_until) : null;
     setBoostActive(!!until && until > new Date());
@@ -160,10 +158,7 @@ export default function RealVibeApp() {
       .eq('wallet_address', walletAddress)
       .single();
 
-    if (error) {
-      console.error('Error cargando swipes:', error);
-      return;
-    }
+    if (error) console.error('Error cargando swipes:', error);
 
     if (data?.last_swipe_date === today) {
       setFreeSwipesLeft(data.free_swipes_left ?? MAX_FREE_SWIPES_PER_DAY);
@@ -563,4 +558,16 @@ export default function RealVibeApp() {
                     }}
                   >
                     <img src={profile.image} alt={profile.name} style={{ width: '100%', borderRadius: '16px', marginBottom: '16px' }} />
-          
+                    <h2>{profile.name}, {profile.age}</h2>
+                    <p>{profile.bio}</p>
+                    <p>📍 {profile.location}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
