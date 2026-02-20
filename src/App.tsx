@@ -75,17 +75,14 @@ export default function App() {
       if (error) {
         console.error('Error cargando mensajes:', error);
         showToast('Error al cargar chat', 'error');
-        // Mantener fake si falla la carga
         setMessages(INITIAL_MESSAGES);
         return;
       }
 
-      console.log('Mensajes cargados de Supabase:', data?.length || 0, 'registros');
-
       if (data.length === 0) {
         setMessages(INITIAL_MESSAGES);
       } else {
-        const mapped = data.map((msg: any) => ({
+        const mapped = data.map(msg => ({
           id: msg.id,
           text: msg.text,
           sender: msg.sender_id === walletAddress ? 'me' : 'other',
@@ -239,12 +236,10 @@ export default function App() {
 
       if (error) throw error;
 
-      // Reemplazar el optimista por el mensaje real (con ID de DB)
+      // Reemplazar optimista por real
       setMessages(prev =>
         prev.map(msg =>
-          msg.id === optimisticId
-            ? { ...msg, id: data.id }
-            : msg
+          msg.id === optimisticId ? { ...msg, id: data.id } : msg
         )
       );
 
@@ -386,7 +381,6 @@ export default function App() {
       boxSizing: 'border-box',
       position: 'relative'
     }}>
-      {/* Toast flotante */}
       {toastMessage && (
         <div style={{
           position: 'fixed',
@@ -446,7 +440,6 @@ export default function App() {
         </div>
       ) : (
         <>
-          {/* Botones de pago */}
           <div style={{
             margin: '20px 0',
             display: 'grid',
@@ -470,7 +463,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Tarjeta perfil */}
           <div style={{
             background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
             borderRadius: '24px',
@@ -541,4 +533,12 @@ export default function App() {
           borderRadius: '50px',
           fontWeight: 'bold',
           border: 'none',
- 
+          boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
+          zIndex: 1000
+        }}
+      >
+        Chat
+      </button>
+    </div>
+  );
+    }
