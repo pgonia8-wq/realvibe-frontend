@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MiniKit } from '@worldcoin/minikit-js';
+import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -9,8 +9,10 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
   : null;
 
+const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 const MAX_FREE_SWIPES_PER_DAY = 10;
 const MAX_MESSAGE_LENGTH = 500;
+const VISIBLE_CARDS = 3;
 
 type SubscriptionLevel = 'none' | 'gold' | 'platinum' | 'diamond';
 
@@ -93,7 +95,7 @@ export default function RealVibeApp() {
   }, [profiles, myMatches, seenWallets]);
 
   const visibleProfiles = useMemo(() => {
-    return availableProfiles.slice(discoverIndex, discoverIndex + 3);
+    return availableProfiles.slice(discoverIndex, discoverIndex + VISIBLE_CARDS);
   }, [availableProfiles, discoverIndex]);
 
   const topProfile = visibleProfiles[0] || null;
@@ -134,9 +136,122 @@ export default function RealVibeApp() {
     setLoading(false);
   };
 
-  // ... (las funciones loadProfile, loadSwipes, decrementSwipes, loadMyMatches, loadProfiles, loadSeenWallets se mantienen iguales a tu versión anterior corregida)
+  const loadProfile = async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('subscription, boost_until')
+      .eq('wallet_address', walletAddress)
+      .single();
 
-  // Conectar wallet + JWT
+    if (error) {
+      console.error('Error cargando perfil:', error);
+      return;
+    }
+
+    setSubscriptionLevel((data?.subscription as SubscriptionLevel) || 'none');
+    const until = data?.boost_until ? new Date(data.boost_until) : null;
+    setBoostActive(!!until && until > new Date());
+  };
+
+  const loadSwipes = async () => {
+    if (!supabase) return;
+    const today = new Date().toDateString();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('free_swipes_left, last_swipe_date')
+      .eq('wallet_address', walletAddress)
+      .single();
+
+    if (error) {
+      console.error('Error cargando swipes:', error);
+      return;
+    }
+
+    if (data?.last_swipe_date === today) {
+      setFreeSwipesLeft(data.free_swipes_left ?? MAX_FREE_SWIPES_PER_DAY);
+    } else {
+      await supabase
+        .from('profiles')
+        .update({ free_swipes_left: MAX_FREE_SWIPES_PER_DAY, last_swipe_date: today })
+        .eq('wallet_address', walletAddress);
+      setFreeSwipesLeft(MAX_FREE_SWIPES_PER_DAY);
+    }
+  };
+
+  const decrementSwipes = async () => {
+    if (!supabase) return;
+    const newCount = Math.max(0, freeSwipesLeft - 1);
+    setFreeSwipesLeft(newCount);
+    const today = new Date().toDateString();
+    await supabase
+      .from('profiles')
+      .update({ free_swipes_left: newCount, last_swipe_date: today })
+      .eq('wallet_address', walletAddress);
+  };
+
+  const loadMyMatches = async () => {
+    if (!supabase || !walletAddress) return;
+
+    const { data, error } = await supabase
+      .from('matches')
+      .select('id, user1_wallet, user2_wallet, created_at')
+      .or(`user1_wallet.eq.\( {walletAddress},user2_wallet.eq. \){walletAddress}`);
+
+    if (error) {
+      console.error('Error cargando matches:', error);
+      showToast('No se pudieron cargar los matches', 'error');
+      return;
+    }
+
+    const formatted = (data || []).map(m => {
+      const otherWallet = m.user1_wallet === walletAddress ? m.user2_wallet : m.user1_wallet;
+      const profile = profiles.find(p => p.wallet === otherWallet);
+      return {
+        id: m.id,
+        otherWallet,
+        otherName: profile?.name || 'Usuario',
+        otherImage: profile?.image || 'https://picsum.photos/80',
+        created_at: m.created_at,
+      };
+    });
+
+    setMyMatches(formatted);
+  };
+
+  const loadProfiles = async () => {
+    if (!supabase) return;
+
+    const { data, error } = await supabase
+      .from('profiles_public')
+      .select('*')
+      .neq('wallet', walletAddress!);
+
+    if (error) {
+      console.error('Error cargando perfiles:', error);
+      showToast('No se pudieron cargar perfiles', 'error');
+      return;
+    }
+
+    setProfiles(data || []);
+  };
+
+  const loadSeenWallets = async () => {
+    if (!supabase || !walletAddress) return;
+
+    const { data, error } = await supabase
+      .from('swipes')
+      .select('to_profile')
+      .eq('from_user', walletAddress);
+
+    if (error) {
+      console.error('Error cargando vistos:', error);
+      return;
+    }
+
+    setSeenWallets(new Set(data?.map(s => s.to_profile) || []));
+  };
+
   const connectWallet = async () => {
     if (!MiniKit.isInstalled()) return showToast('Abre en World App', 'error');
 
@@ -161,10 +276,9 @@ export default function RealVibeApp() {
     }
   };
 
-  // Subir foto
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !walletAddress) return showToast('Selecciona una foto', 'error');
+    if (!file || !walletAddress || !supabase) return showToast('Selecciona una foto', 'error');
 
     const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `\( {walletAddress}. \){fileExt}`;
@@ -179,17 +293,21 @@ export default function RealVibeApp() {
       .from('profile-photos')
       .getPublicUrl(fileName);
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('profiles_public')
-      .upsert({ wallet: walletAddress, image_url: publicUrl }, { onConflict: 'wallet' });
+      .upsert({
+        wallet: walletAddress,
+        image_url: publicUrl,
+      }, { onConflict: 'wallet' });
 
-    showToast('Foto actualizada', 'success');
+    if (updateError) return showToast('Foto subida pero no se actualizó perfil', 'error');
+
+    showToast('Foto de perfil actualizada', 'success');
     loadProfiles();
   };
 
-  // Guardar perfil
   const saveProfile = async () => {
-    if (!walletAddress) return showToast('Conecta wallet primero', 'error');
+    if (!walletAddress || !supabase) return showToast('Conecta wallet primero', 'error');
 
     const { error } = await supabase
       .from('profiles_public')
@@ -201,14 +319,17 @@ export default function RealVibeApp() {
         location: profileForm.location,
       }, { onConflict: 'wallet' });
 
-    if (error) return showToast('Error al guardar perfil', 'error');
+    if (error) {
+      console.error('Error guardando perfil:', error);
+      showToast('Error al guardar perfil', 'error');
+      return;
+    }
 
     showToast('Perfil guardado', 'success');
     setShowProfileForm(false);
     loadProfiles();
   };
 
-  // Swipe + Match (con decremento correcto)
   const handleAction = async (action: 'like' | 'dislike') => {
     if (!topProfile) return;
 
@@ -234,10 +355,17 @@ export default function RealVibeApp() {
     setSeenWallets(prev => new Set([...prev, topProfile.wallet]));
 
     if (action === 'like') {
-      await supabase.from('likes').insert({
-        from_wallet: walletAddress!,
-        to_wallet: topProfile.wallet,
-      });
+      const { error: likeError } = await supabase
+        .from('likes')
+        .insert({
+          from_wallet: walletAddress!,
+          to_wallet: topProfile.wallet,
+        });
+
+      if (likeError && likeError.code !== '23505') {
+        showToast('Error al enviar like', 'error');
+        return;
+      }
 
       const { data: mutual } = await supabase
         .from('likes')
@@ -279,34 +407,76 @@ export default function RealVibeApp() {
     resetCard();
   };
 
-  // ... (gestos handlePointerDown, handlePointerMove, handlePointerUp, resetCard se mantienen iguales)
+  // Gestos
+  const handlePointerDown = (e: React.PointerEvent) => {
+    touchStartX.current = e.clientX;
+    setIsDragging(true);
+    e.preventDefault();
+  };
 
-  // Render final
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging) return;
+    const deltaX = e.clientX - touchStartX.current;
+    setDragX(deltaX);
+    setDragRot(deltaX / 12);
+    setShowLike(deltaX > 60);
+    setShowDislike(deltaX < -60);
+  };
+
+  const handlePointerUp = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      if (Math.abs(dragX) > 120 && topProfile) {
+        const isLike = dragX > 0;
+        setDragX(isLike ? window.innerWidth : -window.innerWidth);
+        setDragRot(isLike ? 45 : -45);
+        setTimeout(() => handleAction(isLike ? 'like' : 'dislike'), 300);
+      } else {
+        resetCard();
+      }
+    }
+  };
+
+  const resetCard = () => {
+    setDragX(0);
+    setDragRot(0);
+    setShowLike(false);
+    setShowDislike(false);
+    setIsDragging(false);
+  };
+
+  // Render
   if (currentScreen === 'chat' && currentMatchId) {
     return (
       <div style={{ background: '#6C1A36', minHeight: '100vh', color: '#fff', padding: '16px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.8rem', marginRight: '16px' }}>←</button>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.8rem', marginRight: '16px' }}>← Volver</button>
           <img src={currentOtherImage} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%', marginRight: '12px' }} />
           <h2>{currentOtherName}</h2>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px', background: 'rgba(0,0,0,0.25)', borderRadius: '16px', marginBottom: '16px' }}>
-          {messages.map(msg => (
-            <div key={msg.id} style={{ margin: '12px 0', display: 'flex', justifyContent: msg.sender === 'me' ? 'flex-end' : 'flex-start' }}>
-              <div style={{
-                maxWidth: '70%',
-                padding: '12px 16px',
-                borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                background: msg.sender === 'me' ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : 'rgba(255,255,255,0.15)',
-              }}>
-                {msg.text}
-                <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px', textAlign: msg.sender === 'me' ? 'right' : 'left' }}>
-                  {msg.time}
+          {chatLoading ? (
+            <p>Cargando mensajes...</p>
+          ) : messages.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#aaa' }}>Di hola para empezar</p>
+          ) : (
+            messages.map(msg => (
+              <div key={msg.id} style={{ margin: '12px 0', display: 'flex', justifyContent: msg.sender === 'me' ? 'flex-end' : 'flex-start' }}>
+                <div style={{
+                  maxWidth: '70%',
+                  padding: '12px 16px',
+                  borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                  background: msg.sender === 'me' ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : 'rgba(255,255,255,0.15)',
+                }}>
+                  {msg.text}
+                  <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px', textAlign: msg.sender === 'me' ? 'right' : 'left' }}>
+                    {msg.time}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
           {isOtherTyping && <p style={{ color: '#aaa', fontStyle: 'italic' }}>{currentOtherName} está escribiendo...</p>}
           <div ref={messagesEndRef} />
         </div>
@@ -368,7 +538,15 @@ export default function RealVibeApp() {
 
           {showProfileForm && (
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001 }}>
-              {/* Formulario completo aquí */}
+              <div style={{ background: '#1a1a1a', padding: '24px', borderRadius: '16px', width: '90%', maxWidth: '400px' }}>
+                <h2>Editar mi perfil</h2>
+                <input type="text" placeholder="Nombre" value={profileForm.name} onChange={e => setProfileForm(prev => ({ ...prev, name: e.target.value }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
+                <input type="number" placeholder="Edad" value={profileForm.age || ''} onChange={e => setProfileForm(prev => ({ ...prev, age: Number(e.target.value) }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
+                <textarea placeholder="Bio" value={profileForm.bio} onChange={e => setProfileForm(prev => ({ ...prev, bio: e.target.value }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white', minHeight: '80px' }} />
+                <input type="text" placeholder="Ubicación" value={profileForm.location} onChange={e => setProfileForm(prev => ({ ...prev, location: e.target.value }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
+                <button onClick={saveProfile} style={{ width: '100%', padding: '16px', marginTop: '16px', borderRadius: '999px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', color: 'white' }}>Guardar</button>
+                <button onClick={() => setShowProfileForm(false)} style={{ width: '100%', padding: '12px', marginTop: '12px', borderRadius: '999px', background: '#444', color: 'white' }}>Cancelar</button>
+              </div>
             </div>
           )}
 
@@ -381,11 +559,13 @@ export default function RealVibeApp() {
             </div>
           ) : (
             <div style={{ position: 'relative', height: '520px', maxWidth: '420px', margin: '0 auto' }}>
-              {/* Stack de tarjetas aquí */}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
+              {visibleProfiles.map((profile, index) => (
+                <div key={profile.id} style={{
+                  position: 'absolute',
+                  top: index * 16,
+                  left: index * 16,
+                  right: index * 16,
+                  transform: index === 0 ? `translateX(\( {dragX}px) rotate( \){dragRot}deg)` : `scale(${1 - index * 0.05})`,
+                  transition: 'transform 0.35s ease-out',
+                  zIndex: 10 - index,
+             
