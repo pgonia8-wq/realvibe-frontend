@@ -77,7 +77,8 @@ export default function App() {
       }
 
       const mapped = data.map(msg => ({
-        ...msg,
+        id: msg.id,
+        text: msg.text,
         sender: msg.sender_id === walletAddress ? 'me' : 'other',
         time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }));
@@ -93,46 +94,13 @@ export default function App() {
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${TEST_MATCH_ID}` },
         (payload) => {
           const newMsg = payload.new;
-
-          // Log para que veamos qué llega
-          console.log('Realtime nuevo mensaje:', {
+          const mappedMsg = {
             id: newMsg.id,
             text: newMsg.text,
-            sender_id: newMsg.sender_id,
-            created_at: newMsg.created_at
-          });
-
-          const isMyMessage = newMsg.sender_id === walletAddress;
-
-          // Si es mío y muy reciente → ignoramos para evitar duplicado inmediato
-          const timeDiff = Math.abs(Date.now() - new Date(newMsg.created_at).getTime());
-          if (isMyMessage && timeDiff < 6000) {
-            console.log('Ignorando mensaje propio reciente para evitar duplicado');
-            return;
-          }
-
-          const mappedMsg = {
-            id: newMsg.id,                     // ← usamos el ID REAL de la DB
-            text: newMsg.text,
-            sender: isMyMessage ? 'me' : 'other',
+            sender: newMsg.sender_id === walletAddress ? 'me' : 'other',
             time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
-
-          setMessages(prev => {
-            // Evitamos agregar si ya existe exactamente el mismo texto muy reciente
-            const exists = prev.some(m => 
-              m.text === newMsg.text && 
-              Math.abs(new Date(m.time).getTime() - Date.now()) < 10000
-            );
-
-            if (exists) {
-              console.log('Texto ya existe en el estado → no agrego');
-              return prev;
-            }
-
-            console.log('Agregando mensaje desde realtime');
-            return [...prev, mappedMsg];
-          });
+          setMessages(prev => [...prev, mappedMsg]);
         }
       )
       .subscribe();
@@ -229,54 +197,18 @@ export default function App() {
     showToast(`¡${action.toUpperCase()} enviado!`);
   };
 
-  const sendMessage = async () => {
-    if (!chatInput.trim() || !walletAddress) {
-      if (!walletAddress) showToast('Conecta tu wallet primero', 'error');
-      return;
-    }
+  const sendMessage = () => {
+    if (!chatInput.trim()) return;
 
-    const messageText = chatInput.trim();
-    const optimisticId = 'temp-' + Date.now();
-
-    const optimisticMsg = {
-      id: optimisticId,
-      text: messageText,
+    const newMsg = {
+      id: messages.length + 1,
+      text: chatInput.trim(),
       sender: 'me',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages(prev => [...prev, optimisticMsg]);
+    setMessages([...messages, newMsg]);
     setChatInput('');
-
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          match_id: TEST_MATCH_ID,
-          sender_id: walletAddress,
-          text: messageText,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Reemplazamos el optimista por el real (mismo texto, ID real)
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === optimisticId
-            ? { ...msg, id: data.id }
-            : msg
-        )
-      );
-
-      showToast('Mensaje enviado', 'success');
-    } catch (err) {
-      console.error('Error real al guardar:', err);
-      // Quitamos solo si falló de verdad
-      setMessages(prev => prev.filter(m => m.id !== optimisticId));
-      showToast('No se pudo enviar el mensaje', 'error');
-    }
   };
 
   if (currentScreen === 'chat') {
@@ -535,4 +467,41 @@ export default function App() {
                 disabled={freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none'}
                 style={{ 
                   padding: '14px 45px', 
-                  background: 'li
+                  background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', 
+                  borderRadius: '50px', 
+                  color: '#fff', 
+                  border: 'none', 
+                  fontSize: '1.1rem',
+                  boxShadow: '0 4px 12px rgba(255,105,180,0.4)'
+                }}
+              >
+                Like
+              </button>
+            </div>
+          </div>
+
+          <p style={{ textAlign: 'center', marginTop: '20px', opacity: 0.8 }}>Próximamente: más perfiles y chat realtime</p>
+        </>
+      )}
+
+      <button 
+        onClick={() => setCurrentScreen('chat')}
+        style={{
+          position: 'fixed',
+          bottom: '25px',
+          right: '25px',
+          background: 'linear-gradient(45deg, pink, #ff69b4)',
+          color: '#000',
+          padding: '16px 24px',
+          borderRadius: '50px',
+          fontWeight: 'bold',
+          border: 'none',
+          boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
+          zIndex: 1000
+        }}
+      >
+        Chat
+      </button>
+    </div>
+  );
+}
