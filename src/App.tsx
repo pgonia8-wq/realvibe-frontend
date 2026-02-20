@@ -36,6 +36,9 @@ export default function RealVibeApp() {
 
   const touchStartX = useRef(0);
 
+  // ────────────────────────────────────────────────
+  // Inicialización
+  // ────────────────────────────────────────────────
   useEffect(() => {
     MiniKit.install();
 
