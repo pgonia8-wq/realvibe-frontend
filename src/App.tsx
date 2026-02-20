@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { MiniKit } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
-// === CONFIGURACIÓN SUPABASE (tus datos reales) ===
-const SUPABASE_URL = 'https://bogcdpwnnjxfgfdcewif.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvZ2NkcHdubmp4ZmdmZGNld2lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyOTM2MjgsImV4cCI6MjA4Njg2OTYyOH0.65pFiqgEmjogf73mZCG-yT2BZqx6Q8cbA_Ce9RhnIhQ';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
-
 const MAX_FREE_SWIPES_PER_DAY = 10;
-const TEST_MATCH_ID = '17';
+const MAX_MESSAGE_LENGTH = 500;
+const VISIBLE_CARDS = 3;
+
+// Tipos
+type SubscriptionLevel = 'none' | 'gold' | 'platinum' | 'diamond';
 
 type Message = {
   id: number | string;
@@ -19,350 +21,502 @@ type Message = {
   time: string;
 };
 
-const INITIAL_MESSAGES: Message[] = [
-  { id: 1, text: 'Hola! ¿Cómo estás?', sender: 'other', time: '02:45' },
-  { id: 2, text: 'Bien, y tú?', sender: 'me', time: '02:46' },
-];
+type Profile = {
+  id: number;
+  name: string;
+  age: number;
+  bio: string;
+  location: string;
+  image: string;
+  wallet: string;
+};
 
-export default function App() {
+type Match = {
+  id: number;
+  otherWallet: string;
+  otherName: string;
+  otherImage: string;
+};
+
+// ────────────────────────────────────────────────
+// Componente principal
+// ────────────────────────────────────────────────
+export default function RealVibeApp() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [subscriptionLevel, setSubscriptionLevel] = useState<SubscriptionLevel>('none');
   const [boostActive, setBoostActive] = useState(false);
-  const [subscriptionLevel, setSubscriptionLevel] = useState<'none' | 'gold' | 'platinum' | 'diamond'>('none');
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [freeSwipesLeft, setFreeSwipesLeft] = useState(MAX_FREE_SWIPES_PER_DAY);
-  const [lastSwipeDate, setLastSwipeDate] = useState<string | null>(null);
+
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [myMatches, setMyMatches] = useState<Match[]>([]);
+  const [seenWallets, setSeenWallets] = useState<Set<string>>(new Set());
+  const [discoverIndex, setDiscoverIndex] = useState(0);
+
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat'>('home');
+  const [currentMatchId, setCurrentMatchId] = useState<number | null>(null);
+  const [currentOtherName, setCurrentOtherName] = useState('');
+  const [currentOtherImage, setCurrentOtherImage] = useState('');
+
+  const [messages, setMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Formulario de perfil
+  const [showProfileForm, setShowProfileForm] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    age: 0,
+    bio: '',
+    location: '',
+  });
+
+  // Swipe states
+  const [dragX, setDragX] = useState(0);
+  const [dragRot, setDragRot] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showLike, setShowLike] = useState(false);
+  const [showDislike, setShowDislike] = useState(false);
+
+  const touchStartX = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Cargar swipes gratis desde localStorage
+  // ────────────────────────────────────────────────
+  // Computed
+  // ────────────────────────────────────────────────
+  const availableProfiles = useMemo(() => {
+    const matched = new Set(myMatches.map(m => m.otherWallet));
+    return profiles.filter(p => 
+      !matched.has(p.wallet) && !seenWallets.has(p.wallet)
+    );
+  }, [profiles, myMatches, seenWallets]);
+
+  const visibleProfiles = useMemo(() => {
+    return availableProfiles.slice(discoverIndex, discoverIndex + VISIBLE_CARDS);
+  }, [availableProfiles, discoverIndex]);
+
+  const topProfile = visibleProfiles[0] || null;
+
+  // ────────────────────────────────────────────────
+  // Inicialización
+  // ────────────────────────────────────────────────
+  useEffect(() => { MiniKit.install(); }, []);
+
   useEffect(() => {
-    const storedDate = localStorage.getItem('lastSwipeDate');
-    const storedSwipes = localStorage.getItem('freeSwipesLeft');
-
-    if (storedDate && storedSwipes) {
-      const today = new Date().toDateString();
-      if (storedDate === today) {
-        setFreeSwipesLeft(Number(storedSwipes));
-        setLastSwipeDate(storedDate);
-      } else {
-        localStorage.setItem('lastSwipeDate', today);
-        localStorage.setItem('freeSwipesLeft', MAX_FREE_SWIPES_PER_DAY.toString());
-        setFreeSwipesLeft(MAX_FREE_SWIPES_PER_DAY);
-        setLastSwipeDate(today);
-      }
-    } else {
-      const today = new Date().toDateString();
-      localStorage.setItem('lastSwipeDate', today);
-      localStorage.setItem('freeSwipesLeft', MAX_FREE_SWIPES_PER_DAY.toString());
-      setLastSwipeDate(today);
-    }
+    const stored = localStorage.getItem('walletAddress');
+    if (stored) setWalletAddress(stored);
   }, []);
 
-  // Cargar mensajes desde Supabase + realtime
   useEffect(() => {
-    if (currentScreen !== 'chat' || !walletAddress) return;
+    if (!walletAddress) return;
+    loadEverything();
+  }, [walletAddress]);
 
-    const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('match_id', TEST_MATCH_ID)
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('Error cargando mensajes:', error);
-        showToast('Error al cargar chat', 'error');
-        setMessages(INITIAL_MESSAGES);
-        return;
-      }
-
-      if (data.length === 0) {
-        setMessages(INITIAL_MESSAGES);
-      } else {
-        const mapped = data.map(msg => ({
-          id: msg.id,
-          text: msg.text,
-          sender: msg.sender_id === walletAddress ? 'me' : 'other',
-          time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }));
-        setMessages(mapped);
-      }
-    };
-
-    loadMessages();
-
-    const channel = supabase
-      .channel(`messages:${TEST_MATCH_ID}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${TEST_MATCH_ID}` },
-        (payload) => {
-          const newMsg = payload.new;
-          const mappedMsg = {
-            id: newMsg.id,
-            text: newMsg.text,
-            sender: newMsg.sender_id === walletAddress ? 'me' : 'other',
-            time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          };
-          setMessages(prev => [...prev, mappedMsg]);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentScreen, walletAddress]);
-
-  // Scroll automático
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 3000);
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 2800);
   };
 
-  const connectWallet = async () => {
-    if (!MiniKit.isInstalled()) {
-      showToast('Abre esta app dentro de World App', 'error');
-      return;
-    }
-
+  const loadEverything = async () => {
     setLoading(true);
-    try {
-      const nonce = Math.random().toString(36).substring(2);
-      const response = await MiniKit.commandsAsync.walletAuth({ nonce, statement: 'Conectar a RealVibe 3.0' });
-
-      if (response.finalPayload.status === 'success') {
-        const address = response.finalPayload.address;
-        setWalletAddress(address);
-        showToast('¡Conectado exitosamente!');
-      } else {
-        showToast('Conexión cancelada', 'error');
-      }
-    } catch (error) {
-      showToast('Error al conectar', 'error');
-    }
+    await Promise.all([
+      loadProfile(),
+      loadSwipes(),
+      loadMyMatches(),
+      loadProfiles(),
+      loadSeenWallets(),
+    ]);
     setLoading(false);
   };
 
-  const handlePayment = async (amount: number, type: string, desc: string) => {
-    if (!walletAddress) return showToast('Conecta tu wallet primero', 'error');
+  // ────────────────────────────────────────────────
+  // Carga de datos
+  // ────────────────────────────────────────────────
+  const loadProfile = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('subscription, boost_until')
+      .eq('wallet_address', walletAddress)
+      .single();
 
-    if (type !== 'boost' && subscriptionLevel !== 'none') {
-      return showToast('Ya tienes una suscripción activa', 'error');
-    }
+    if (error) console.error('loadProfile error:', error);
+    setSubscriptionLevel((data?.subscription as SubscriptionLevel) || 'none');
+    const until = data?.boost_until ? new Date(data.boost_until) : null;
+    setBoostActive(!!until && until > new Date());
+  };
 
-    try {
-      const payload = {
-        reference: `\( {type}- \){Date.now()}`,
-        to: TREASURY_WALLET,
-        tokens: [{ symbol: Tokens.WLD, token_amount: tokenToDecimals(amount, Tokens.WLD).toString() }],
-        description: desc + ' en RealVibe 3.0',
-      };
+  const loadSwipes = async () => {
+    const today = new Date().toDateString();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('free_swipes_left, last_swipe_date')
+      .eq('wallet_address', walletAddress)
+      .single();
 
-      const { finalPayload } = await MiniKit.commandsAsync.pay(payload);
+    if (error) console.error('loadSwipes error:', error);
 
-      if (finalPayload.status === 'success') {
-        if (type === 'boost') {
-          setBoostActive(true);
-          showToast('¡Boost activado por 24 horas!');
-        } else {
-          setSubscriptionLevel(type as any);
-          showToast(`¡Suscripción ${desc} activada!`);
-        }
-      } else {
-        showToast('Pago cancelado', 'error');
-      }
-    } catch (error) {
-      showToast('Error en el pago', 'error');
+    if (data?.last_swipe_date === today) {
+      setFreeSwipesLeft(data.free_swipes_left ?? MAX_FREE_SWIPES_PER_DAY);
+    } else {
+      await supabase
+        .from('profiles')
+        .update({ free_swipes_left: MAX_FREE_SWIPES_PER_DAY, last_swipe_date: today })
+        .eq('wallet_address', walletAddress);
+      setFreeSwipesLeft(MAX_FREE_SWIPES_PER_DAY);
     }
   };
 
-  const doBoost = () => handlePayment(1, 'boost', 'Boost 1 WLD');
-  const doGold = () => handlePayment(10, 'gold', 'Gold');
-  const doPlatinum = () => handlePayment(25, 'platinum', 'Platinum');
-  const doDiamond = () => handlePayment(40, 'diamond', 'Diamond');
-
-  const handleAction = (action: 'like' | 'dislike') => {
-    if (freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none') {
-      return showToast('Límite diario alcanzado. Usa Boost o suscripción', 'error');
-    }
-
-    if (!boostActive && subscriptionLevel === 'none') {
-      const newSwipes = freeSwipesLeft - 1;
-      setFreeSwipesLeft(newSwipes);
-      localStorage.setItem('freeSwipesLeft', newSwipes.toString());
-      localStorage.setItem('lastSwipeDate', new Date().toDateString());
-    }
-
-    showToast(`¡${action.toUpperCase()} enviado!`);
+  const decrementSwipes = async () => {
+    const newCount = Math.max(0, freeSwipesLeft - 1);
+    setFreeSwipesLeft(newCount);
+    const today = new Date().toDateString();
+    await supabase
+      .from('profiles')
+      .update({ free_swipes_left: newCount, last_swipe_date: today })
+      .eq('wallet_address', walletAddress);
   };
 
-  const sendMessage = async () => {
-    if (!chatInput.trim() || !walletAddress) {
-      if (!walletAddress) showToast('Conecta tu wallet primero', 'error');
+  const loadMyMatches = async () => {
+    if (!walletAddress) return;
+
+    const { data, error } = await supabase
+      .from('matches')
+      .select('id, user1_wallet, user2_wallet, created_at')
+      .or(`user1_wallet.eq.\( {walletAddress},user2_wallet.eq. \){walletAddress}`);
+
+    if (error) {
+      console.error('Error cargando matches:', error);
+      showToast('No se pudieron cargar los matches', 'error');
       return;
     }
 
-    const messageText = chatInput.trim();
-    const optimisticId = 'temp-' + Date.now();
+    const formatted = (data || []).map(m => {
+      const otherWallet = m.user1_wallet === walletAddress ? m.user2_wallet : m.user1_wallet;
+      const profile = profiles.find(p => p.wallet === otherWallet);
+      return {
+        id: m.id,
+        otherWallet,
+        otherName: profile?.name || 'Usuario',
+        otherImage: profile?.image || 'https://picsum.photos/80',
+        created_at: m.created_at,
+      };
+    });
 
-    const optimisticMsg = {
-      id: optimisticId,
-      text: messageText,
-      sender: 'me',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
+    setMyMatches(formatted);
+  };
 
-    setMessages(prev => [...prev, optimisticMsg]);
-    setChatInput('');
+  const loadProfiles = async () => {
+    const { data, error } = await supabase
+      .from('profiles_public')
+      .select('*')
+      .neq('wallet', walletAddress!);
+
+    if (error) {
+      console.error('Error cargando perfiles:', error);
+      showToast('No se pudieron cargar perfiles', 'error');
+      return;
+    }
+
+    setProfiles(data || []);
+  };
+
+  const loadSeenWallets = async () => {
+    if (!walletAddress) return;
+
+    const { data, error } = await supabase
+      .from('swipes')
+      .select('to_profile')
+      .eq('from_user', walletAddress);
+
+    if (error) return console.error('Error cargando vistos:', error);
+
+    setSeenWallets(new Set(data?.map(s => s.to_profile) || []));
+  };
+
+  // ────────────────────────────────────────────────
+  // Conectar wallet
+  // ────────────────────────────────────────────────
+  const connectWallet = async () => {
+    if (!MiniKit.isInstalled()) return showToast('Abre en World App', 'error');
 
     try {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          match_id: TEST_MATCH_ID,
-          sender_id: walletAddress,
-          text: messageText,
-        })
-        .select()
-        .single();
+      const nonce = Date.now().toString() + Math.random().toString(36).slice(2);
+      const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
+        nonce,
+        statement: 'Conectar a RealVibe',
+      });
 
-      if (error) throw error;
+      if (finalPayload.status !== 'success') return showToast('Conexión cancelada', 'error');
 
-      // Reemplazar optimista por real
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === optimisticId ? { ...msg, id: data.id } : msg
-        )
-      );
+      const address = MiniKit.walletAddress || (finalPayload as any).address;
+      if (!address) return;
 
-      showToast('Mensaje enviado', 'success');
+      setWalletAddress(address);
+      localStorage.setItem('walletAddress', address);
+
+      showToast('Wallet conectada ✅', 'success');
     } catch (err) {
-      console.error('Error al guardar mensaje:', err);
-      setMessages(prev => prev.filter(m => m.id !== optimisticId));
-      showToast('No se pudo enviar el mensaje', 'error');
+      showToast('Error al conectar wallet', 'error');
     }
   };
 
-  if (currentScreen === 'chat') {
+  // ────────────────────────────────────────────────
+  // Subir foto de perfil (desde modal o botón)
+  // ────────────────────────────────────────────────
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !walletAddress) return showToast('Selecciona una foto', 'error');
+
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `\( {walletAddress}. \){fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('profile-photos')
+      .upload(fileName, file, { upsert: true });
+
+    if (uploadError) return showToast('Error subiendo foto', 'error');
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('profile-photos')
+      .getPublicUrl(fileName);
+
+    const { error: updateError } = await supabase
+      .from('profiles_public')
+      .upsert({
+        wallet: walletAddress,
+        image_url: publicUrl,
+      }, { onConflict: 'wallet' });
+
+    if (updateError) return showToast('Foto subida pero no se actualizó perfil', 'error');
+
+    showToast('Foto de perfil actualizada', 'success');
+    loadProfiles();
+  };
+
+  // ────────────────────────────────────────────────
+  // Guardar / actualizar mi perfil
+  // ────────────────────────────────────────────────
+  const saveProfile = async () => {
+    if (!walletAddress) return showToast('Conecta wallet primero', 'error');
+
+    const { error } = await supabase
+      .from('profiles_public')
+      .upsert({
+        wallet: walletAddress,
+        name: profileForm.name || 'Usuario',
+        age: profileForm.age || null,
+        bio: profileForm.bio,
+        location: profileForm.location,
+      }, { onConflict: 'wallet' });
+
+    if (error) {
+      showToast('Error al guardar perfil', 'error');
+      return;
+    }
+
+    showToast('Perfil guardado', 'success');
+    setShowProfileForm(false);
+    loadProfiles();
+  };
+
+  // ────────────────────────────────────────────────
+  // Swipe + Match
+  // ────────────────────────────────────────────────
+  const handleAction = async (action: 'like' | 'dislike') => {
+    if (!topProfile) return;
+
+    const isLimited = subscriptionLevel === 'none' && !boostActive;
+    if (isLimited && freeSwipesLeft <= 0) {
+      showToast('Swipes gratis agotados', 'error');
+      return;
+    }
+
+    // Registrar swipe
+    const { error: swipeError } = await supabase
+      .from('swipes')
+      .insert({
+        from_user: walletAddress!,
+        to_profile: topProfile.wallet,
+        action,
+      });
+
+    if (swipeError) {
+      showToast('Error al registrar swipe', 'error');
+      return;
+    }
+
+    setSeenWallets(prev => new Set([...prev, topProfile.wallet]));
+
+    // Si es Like → registrar en likes
+    if (action === 'like') {
+      const { error: likeError } = await supabase
+        .from('likes')
+        .insert({
+          from_wallet: walletAddress!,
+          to_wallet: topProfile.wallet,
+        });
+
+      if (likeError && likeError.code !== '23505') {
+        showToast('Error al enviar like', 'error');
+        return;
+      }
+
+      // Verificar like mutuo
+      const { data: mutual } = await supabase
+        .from('likes')
+        .select('id')
+        .eq('from_wallet', topProfile.wallet)
+        .eq('to_wallet', walletAddress!)
+        .maybeSingle();
+
+      if (mutual) {
+        const sorted = [walletAddress!, topProfile.wallet].sort();
+        const { data: match, error: matchError } = await supabase
+          .from('matches')
+          .insert({
+            user1_wallet: sorted[0],
+            user2_wallet: sorted[1],
+          })
+          .select()
+          .single();
+
+        if (matchError) {
+          showToast('Error al crear match', 'error');
+        } else {
+          setMyMatches(prev => [...prev, {
+            id: match.id,
+            otherWallet: topProfile.wallet,
+            otherName: topProfile.name,
+            otherImage: topProfile.image,
+          }]);
+          showToast(`¡Match con ${topProfile.name}! 💕`, 'success');
+        }
+      } else {
+        showToast(`Like enviado a ${topProfile.name}`, 'success');
+      }
+    } else {
+      showToast('Dislike registrado', 'success');
+    }
+
+    // Decrementar swipes gratis (LIKE o DISLIKE)
+    if (isLimited) {
+      await decrementSwipes();
+    }
+
+    setDiscoverIndex(prev => prev + 1);
+    resetCard();
+  };
+
+  // ────────────────────────────────────────────────
+  // Gestos (touch + pointer)
+  // ────────────────────────────────────────────────
+  const handlePointerDown = (e: React.PointerEvent) => {
+    touchStartX.current = e.clientX;
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging) return;
+    const deltaX = e.clientX - touchStartX.current;
+    setDragX(deltaX);
+    setDragRot(deltaX / 12);
+    setShowLike(deltaX > 60);
+    setShowDislike(deltaX < -60);
+  };
+
+  const handlePointerUp = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      const threshold = 120;
+
+      if (Math.abs(dragX) > threshold && topProfile) {
+        const isLike = dragX > 0;
+        setDragX(isLike ? window.innerWidth : -window.innerWidth);
+        setDragRot(isLike ? 45 : -45);
+
+        setTimeout(() => {
+          handleAction(isLike ? 'like' : 'dislike');
+        }, 300);
+      } else {
+        resetCard();
+      }
+    }
+  };
+
+  const resetCard = () => {
+    setDragX(0);
+    setDragRot(0);
+    setShowLike(false);
+    setShowDislike(false);
+    setIsDragging(false);
+  };
+
+  // ────────────────────────────────────────────────
+  // Render
+  // ────────────────────────────────────────────────
+  if (currentScreen === 'chat' && currentMatchId) {
     return (
-      <div style={{ 
-        backgroundColor: '#6C1A36', 
-        minHeight: '100vh', 
-        color: '#fff', 
-        display: 'flex', 
-        flexDirection: 'column',
-        padding: '15px',
-        boxSizing: 'border-box'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <button 
-            onClick={() => setCurrentScreen('home')}
-            style={{ background: 'transparent', color: '#fff', fontSize: '1.5rem', border: 'none' }}
-          >
-            ← Volver
-          </button>
-          <h2 style={{ margin: 0 }}>Chat con José</h2>
+      <div style={{ background: '#6C1A36', minHeight: '100vh', color: '#fff', padding: '16px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.8rem', marginRight: '16px' }}>← Volver</button>
+          <img src={currentOtherImage} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%', marginRight: '12px' }} />
+          <h2>{currentOtherName}</h2>
         </div>
 
-        <div style={{ 
-          flex: 1, 
-          overflowY: 'auto', 
-          padding: '10px 0',
-          background: 'rgba(0,0,0,0.25)',
-          borderRadius: '16px',
-          marginBottom: '15px'
-        }}>
-          {messages.map(msg => (
-            <div 
-              key={msg.id}
-              style={{
-                margin: '10px 15px',
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px', background: 'rgba(0,0,0,0.25)', borderRadius: '16px', marginBottom: '16px' }}>
+          {chatLoading ? (
+            <p>Cargando mensajes...</p>
+          ) : messages.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#aaa' }}>Di hola para empezar</p>
+          ) : (
+            messages.map(msg => (
+              <div key={msg.id} style={{
                 display: 'flex',
                 justifyContent: msg.sender === 'me' ? 'flex-end' : 'flex-start',
-                alignItems: 'flex-start'
-              }}
-            >
-              {msg.sender === 'other' && (
-                <div style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
-                  marginRight: '12px',
-                  flexShrink: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.3rem',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-                }}>
-                  👤
-                </div>
-              )}
-
-              <div style={{
-                maxWidth: '72%',
-                padding: '12px 16px',
-                borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                background: msg.sender === 'me' 
-                  ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' 
-                  : 'rgba(255,255,255,0.12)',
-                color: '#fff',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                wordBreak: 'break-word'
+                margin: '12px 0',
               }}>
-                {msg.text}
-                <div style={{ 
-                  fontSize: '0.75rem', 
-                  opacity: 0.75, 
-                  marginTop: '6px', 
-                  textAlign: msg.sender === 'me' ? 'right' : 'left' 
+                <div style={{
+                  maxWidth: '70%',
+                  padding: '12px 16px',
+                  borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                  background: msg.sender === 'me' ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : 'rgba(255,255,255,0.15)',
                 }}>
-                  {msg.time}
+                  {msg.text}
+                  <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px', textAlign: msg.sender === 'me' ? 'right' : 'left' }}>
+                    {msg.time}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
+
+          {isOtherTyping && (
+            <p style={{ color: '#aaa', fontStyle: 'italic' }}>{currentOtherName} está escribiendo...</p>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
           <input
-            type="text"
             value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
+            onChange={e => setChatInput(e.target.value)}
             placeholder="Escribe un mensaje..."
-            style={{
-              flex: 1,
-              padding: '14px 18px',
-              borderRadius: '50px',
-              border: 'none',
-              background: 'rgba(255,255,255,0.08)',
-              color: '#fff',
-              fontSize: '1rem',
-              outline: 'none'
-            }}
-            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            maxLength={MAX_MESSAGE_LENGTH}
+            style={{ flex: 1, padding: '12px 16px', borderRadius: '999px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white' }}
           />
           <button
-            onClick={sendMessage}
-            style={{
-              padding: '14px 24px',
-              background: 'linear-gradient(90deg, #ff69b4, #8a2be2)',
-              borderRadius: '50px',
-              border: 'none',
-              color: '#fff',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
+            onClick={() => {/* tu lógica de enviar mensaje */}}
+            style={{ padding: '12px 24px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', borderRadius: '999px', color: 'white', border: 'none' }}
           >
             Enviar
           </button>
@@ -372,173 +526,175 @@ export default function App() {
   }
 
   return (
-    <div style={{
-      backgroundColor: '#6C1A36',
-      minHeight: '100vh',
-      color: '#fff',
-      fontFamily: "'Plus Jakarta Sans', sans-serif",
-      padding: '15px',
-      boxSizing: 'border-box',
-      position: 'relative'
-    }}>
-      {toastMessage && (
+    <div style={{ background: '#6C1A36', minHeight: '100vh', color: '#fff', padding: '16px' }}>
+      {toast && (
         <div style={{
           position: 'fixed',
           top: '20px',
           left: '50%',
           transform: 'translateX(-50%)',
           padding: '12px 24px',
-          borderRadius: '50px',
-          background: toastMessage.type === 'success' ? 'rgba(0,200,0,0.9)' : 'rgba(255,80,80,0.9)',
-          color: '#fff',
-          fontWeight: 'bold',
+          borderRadius: '999px',
+          background: toast.type === 'success' ? '#22c55e' : '#ef4444',
+          color: 'white',
           zIndex: 1000,
-          boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
         }}>
-          {toastMessage.text}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <button style={{ background: 'transparent', color: '#fff', fontSize: '1.8rem', border: 'none' }}>←</button>
-        <h1 style={{ margin: 0, fontSize: '1.8rem' }}>RealVibe 3.0</h1>
-        <button style={{ background: 'transparent', color: '#fff', fontSize: '1.8rem', border: 'none' }}>⚙️</button>
-      </div>
-
-      {walletAddress && (
-        <div style={{ textAlign: 'center', marginBottom: '20px', fontSize: '0.95rem' }}>
-          <p>Wallet: {walletAddress.slice(0,6)}...{walletAddress.slice(-4)}</p>
-          <p>Swipes gratis hoy: {freeSwipesLeft} / {MAX_FREE_SWIPES_PER_DAY}</p>
-          {subscriptionLevel !== 'none' && (
-            <p style={{ color: '#ffd700', fontWeight: 'bold' }}>
-              Suscripción activa: {subscriptionLevel.toUpperCase()}
-            </p>
-          )}
-          {boostActive && <p style={{ color: '#ff8c00', fontWeight: 'bold' }}>Boost activo 24h 🔥</p>}
+          {toast.text}
         </div>
       )}
 
       {!walletAddress ? (
-        <div style={{ textAlign: 'center', marginTop: '120px' }}>
-          <p>Conecta tu wallet para empezar</p>
-          <button 
-            onClick={connectWallet}
-            disabled={loading}
-            style={{
-              marginTop: '25px',
-              padding: '16px 50px',
-              fontSize: '1.3rem',
-              borderRadius: '50px',
-              background: 'linear-gradient(90deg, #ff69b4, #8a2be2)',
-              color: '#fff',
-              border: 'none',
-              cursor: loading ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? 'Conectando...' : '🔗 Conectar Wallet'}
-          </button>
+        <div style={{ textAlign: 'center', marginTop: '200px' }}>
+          <button onClick={connectWallet}>Conectar Wallet</button>
         </div>
       ) : (
         <>
-          <div style={{
-            margin: '20px 0',
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '12px',
-            maxWidth: '380px',
-            marginLeft: 'auto',
-            marginRight: 'auto'
-          }}>
-            <button onClick={doBoost} disabled={boostActive} style={{ padding: '12px 8px', fontSize: '0.95rem', borderRadius: '12px', background: boostActive ? '#555' : 'linear-gradient(135deg, #ff8c00, #ff4500)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: boostActive ? 'not-allowed' : 'pointer' }}>
-              🔥 Boost 1 WLD
+          {/* Botones de prueba */}
+          <div style={{ marginBottom: '24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <button onClick={() => setShowProfileForm(true)} style={{ padding: '12px 24px', borderRadius: '999px', background: '#444', color: 'white' }}>
+              Editar mi perfil
             </button>
-            <button onClick={doGold} disabled={subscriptionLevel !== 'none'} style={{ padding: '12px 8px', fontSize: '0.95rem', borderRadius: '12px', background: subscriptionLevel === 'gold' ? '#555' : 'linear-gradient(135deg, #b8860b, #ffd700)', color: '#000', border: 'none', fontWeight: 'bold', cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer' }}>
-              ⭐ Gold 10 WLD
-            </button>
-            <button onClick={doPlatinum} disabled={subscriptionLevel !== 'none'} style={{ padding: '12px 8px', fontSize: '0.95rem', borderRadius: '12px', background: subscriptionLevel === 'platinum' ? '#555' : 'linear-gradient(135deg, #a9a9a9, #e0e0e0)', color: '#000', border: 'none', fontWeight: 'bold', cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer' }}>
-              🏆 Platinum 25 WLD
-            </button>
-            <button onClick={doDiamond} disabled={subscriptionLevel !== 'none'} style={{ padding: '12px 8px', fontSize: '0.95rem', borderRadius: '12px', background: subscriptionLevel === 'diamond' ? '#555' : 'linear-gradient(135deg, #7b1fa2, #ab47bc)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: subscriptionLevel !== 'none' ? 'not-allowed' : 'pointer' }}>
-              💎 Diamond 40 WLD
+            <button onClick={() => fileInputRef.current?.click()} style={{ padding: '12px 24px', borderRadius: '999px', background: '#444', color: 'white' }}>
+              Subir foto
             </button>
           </div>
 
-          <div style={{
-            background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
-            borderRadius: '24px',
-            padding: '20px',
-            margin: '0 auto 30px auto',
-            maxWidth: '420px',
-            boxShadow: '0 12px 35px rgba(0,0,0,0.5)',
-            textAlign: 'center'
-          }}>
-            <div style={{ overflow: 'hidden', borderRadius: '18px', marginBottom: '15px' }}>
-              <img 
-                src="https://placekitten.com/450/600" 
-                alt="Perfil" 
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-            </div>
-            <h2 style={{ margin: '12px 0', fontSize: '1.7rem' }}>José</h2>
-            <p style={{ margin: '8px 0', fontSize: '1.15rem' }}>Amante de la música</p>
-            <p style={{ fontSize: '0.98rem', opacity: 0.9 }}>CDMX • 24 años</p>
+          {/* Formulario de perfil mejorado */}
+          {showProfileForm && (
+            <div style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1001,
+            }}>
+              <div style={{
+                background: '#1a1a1a',
+                padding: '24px',
+                borderRadius: '16px',
+                width: '90%',
+                maxWidth: '400px',
+              }}>
+                <h2>Editar mi perfil</h2>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '25px', marginTop: '30px' }}>
-              <button 
-                onClick={() => handleAction('dislike')}
-                disabled={freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none'}
-                style={{ 
-                  padding: '14px 35px', 
-                  background: '#555', 
-                  borderRadius: '50px', 
-                  color: '#fff', 
-                  border: 'none', 
-                  fontSize: '1.1rem',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                }}
-              >
-                Dislike
-              </button>
-              <button 
-                onClick={() => handleAction('like')}
-                disabled={freeSwipesLeft <= 0 && !boostActive && subscriptionLevel === 'none'}
-                style={{ 
-                  padding: '14px 45px', 
-                  background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', 
-                  borderRadius: '50px', 
-                  color: '#fff', 
-                  border: 'none', 
-                  fontSize: '1.1rem',
-                  boxShadow: '0 4px 12px rgba(255,105,180,0.4)'
-                }}
-              >
-                Like
-              </button>
-            </div>
-          </div>
+                <input
+                  type="text"
+                  placeholder="Nombre"
+                  value={profileForm.name}
+                  onChange={e => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
+                  style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white', border: 'none' }}
+                />
 
-          <p style={{ textAlign: 'center', marginTop: '20px', opacity: 0.8 }}>Próximamente: más perfiles y chat realtime</p>
+                <input
+                  type="number"
+                  placeholder="Edad"
+                  value={profileForm.age || ''}
+                  onChange={e => setProfileForm(prev => ({ ...prev, age: Number(e.target.value) }))}
+                  style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white', border: 'none' }}
+                />
+
+                <textarea
+                  placeholder="Bio (máx 150 caracteres)"
+                  value={profileForm.bio}
+                  onChange={e => setProfileForm(prev => ({ ...prev, bio: e.target.value.slice(0, 150) }))}
+                  style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white', border: 'none', minHeight: '80px' }}
+                />
+
+                <input
+                  type="text"
+                  placeholder="Ubicación"
+                  value={profileForm.location}
+                  onChange={e => setProfileForm(prev => ({ ...prev, location: e.target.value }))}
+                  style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white', border: 'none' }}
+                />
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ width: '100%', padding: '12px', margin: '12px 0', background: '#555', color: 'white', border: 'none', borderRadius: '999px' }}
+                >
+                  Subir foto de perfil
+                </button>
+
+                <button
+                  onClick={saveProfile}
+                  style={{ width: '100%', padding: '16px', marginTop: '16px', borderRadius: '999px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', color: 'white', border: 'none' }}
+                >
+                  Guardar perfil
+                </button>
+
+                <button
+                  onClick={() => setShowProfileForm(false)}
+                  style={{ width: '100%', padding: '12px', marginTop: '12px', borderRadius: '999px', background: '#444', color: 'white', border: 'none' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Contenido principal */}
+          {loading ? (
+            <p style={{ textAlign: 'center' }}>Cargando...</p>
+          ) : availableProfiles.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '120px 20px' }}>
+              <div style={{ fontSize: '5rem' }}>🌵</div>
+              <h2>No hay más perfiles</h2>
+              <p>Vuelve más tarde o invita amigos</p>
+            </div>
+          ) : (
+            <div style={{ position: 'relative', height: '520px', maxWidth: '420px', margin: '0 auto' }}>
+              {availableProfiles.slice(discoverIndex, discoverIndex + VISIBLE_CARDS).map((profile, index) => (
+                <div
+                  key={profile.id}
+                  style={{
+                    position: 'absolute',
+                    top: index * 16,
+                    left: index * 16,
+                    right: index * 16,
+                    transform: index === 0 ? `translateX(\( {dragX}px) rotate( \){dragRot}deg)` : `scale(\( {1 - index * 0.05}) translateY( \){index * 20}px)`,
+                    transition: 'transform 0.35s ease-out',
+                    zIndex: VISIBLE_CARDS - index,
+                  }}
+                >
+                  <div
+                    onPointerDown={index === 0 ? handlePointerDown : undefined}
+                    onPointerMove={index === 0 ? handlePointerMove : undefined}
+                    onPointerUp={index === 0 ? handlePointerUp : undefined}
+                    onPointerCancel={resetCard}
+                    style={{
+                      background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
+                      borderRadius: '24px',
+                      padding: '20px',
+                      boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+                      cursor: index === 0 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                    }}
+                  >
+                    <img src={profile.image} alt={profile.name} style={{ width: '100%', borderRadius: '16px', marginBottom: '16px' }} />
+                    <h2>{profile.name}, {profile.age}</h2>
+                    <p>{profile.bio}</p>
+                    <p>📍 {profile.location}</p>
+                  </div>
+                </div>
+              ))}
+
+              {/* Overlays */}
+              {isDragging && topProfile && (
+                <>
+                  {showLike && <div style={{ position: 'absolute', top: '80px', right: '60px', fontSize: '8rem', opacity: Math.min(1, dragX / 300) }}>❤️</div>}
+                  {showDislike && <div style={{ position: 'absolute', top: '80px', left: '60px', fontSize: '8rem', opacity: Math.min(1, Math.abs(dragX) / 300) }}>👎</div>}
+                </>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '40px', marginTop: '340px' }}>
+                <button onClick={() => handleAction('dislike')} style={{ padding: '16px 48px', background: '#444', borderRadius: '999px', color: 'white' }}>👎</button>
+                <button onClick={() => handleAction('like')} style={{ padding: '16px 56px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', borderRadius: '999px', color: 'white' }}>❤️</button>
+              </div>
+            </div>
+          )}
         </>
       )}
-
-      <button 
-        onClick={() => setCurrentScreen('chat')}
-        style={{
-          position: 'fixed',
-          bottom: '25px',
-          right: '25px',
-          background: 'linear-gradient(45deg, pink, #ff69b4)',
-          color: '#000',
-          padding: '16px 24px',
-          borderRadius: '50px',
-          fontWeight: 'bold',
-          border: 'none',
-          boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
-          zIndex: 1000
-        }}
-      >
-        Chat
-      </button>
     </div>
   );
-    }
+}
