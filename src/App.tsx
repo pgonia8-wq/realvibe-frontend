@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { MiniKit } from '@worldcoin/minikit-js';
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
 
@@ -8,6 +14,8 @@ export default function RealVibeApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [freeSwipesLeft, setFreeSwipesLeft] = useState(MAX_FREE_SWIPES_PER_DAY);
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [discoverIndex, setDiscoverIndex] = useState(0);
 
   useEffect(() => {
     const init = async () => {
@@ -28,6 +36,27 @@ export default function RealVibeApp() {
 
     init();
   }, []);
+
+  useEffect(() => {
+    if (!walletAddress) return;
+
+    const loadProfiles = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles_public')
+          .select('*')
+          .neq('wallet', walletAddress);
+
+        if (error) throw error;
+
+        setProfiles(data || []);
+      } catch (err) {
+        setError('Error cargando perfiles: ' + (err as Error).message);
+      }
+    };
+
+    loadProfiles();
+  }, [walletAddress]);
 
   const connectWallet = async () => {
     try {
@@ -64,10 +93,18 @@ export default function RealVibeApp() {
             Swipes restantes: {freeSwipesLeft}/{MAX_FREE_SWIPES_PER_DAY}
           </p>
 
-          <div style={{ marginTop: '40px' }}>
-            <h2>No hay más perfiles</h2>
-            <p>Vuelve más tarde o invita amigos</p>
-          </div>
+          {profiles.length === 0 ? (
+            <div style={{ marginTop: '40px' }}>
+              <h2>No hay más perfiles</h2>
+              <p>Vuelve más tarde o invita amigos</p>
+            </div>
+          ) : (
+            <div style={{ marginTop: '40px' }}>
+              <h2>¡Perfiles cargados!</h2>
+              <p>Total: {profiles.length}</p>
+              <p>Primer perfil: {profiles[0]?.name || 'Sin nombre'} ({profiles[0]?.wallet?.slice(0, 6)}...)</p>
+            </div>
+          )}
         </>
       ) : (
         <button 
@@ -81,4 +118,4 @@ export default function RealVibeApp() {
       {error && <p style={{ color: '#ff4d4d', marginTop: '40px' }}>{error}</p>}
     </div>
   );
-    }
+          }
