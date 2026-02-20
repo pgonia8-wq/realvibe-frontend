@@ -2,10 +2,23 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Protección contra variables de entorno faltantes → evita white screen
+let supabase: ReturnType<typeof createClient> | null = null;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('ERROR CRÍTICO: Faltan variables de entorno Supabase');
+  console.error('VITE_SUPABASE_URL:', SUPABASE_URL);
+  console.error('VITE_SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'existe' : 'NO existe');
+} else {
+  try {
+    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch (err) {
+    console.error('Error al crear cliente Supabase:', err);
+  }
+}
 
 const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 const MAX_FREE_SWIPES_PER_DAY = 10;
@@ -69,6 +82,9 @@ export default function RealVibeApp() {
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
 
+  const [hasCriticalError, setHasCriticalError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   // Swipe states
   const [dragX, setDragX] = useState(0);
   const [dragRot, setDragRot] = useState(0);
@@ -130,6 +146,13 @@ export default function RealVibeApp() {
   // ────────────────────────────────────────────────
   // Effects
   // ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!supabase) {
+      setHasCriticalError(true);
+      setErrorMessage('Supabase no está configurado. Revisa las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en tu .env');
+    }
+  }, []);
+
   useEffect(() => { MiniKit.install(); }, []);
 
   useEffect(() => {
@@ -138,7 +161,7 @@ export default function RealVibeApp() {
   }, []);
 
   useEffect(() => {
-    if (walletAddress) loadEverything();
+    if (walletAddress && supabase) loadEverything();
   }, [walletAddress]);
 
   useEffect(() => {
@@ -147,7 +170,7 @@ export default function RealVibeApp() {
 
   // Realtime chat
   useEffect(() => {
-    if (currentScreen !== 'chat' || !currentMatchId || !walletAddress) return;
+    if (!supabase || currentScreen !== 'chat' || !currentMatchId || !walletAddress) return;
 
     const channel = supabase
       .channel(`messages:${currentMatchId}`)
@@ -177,72 +200,78 @@ export default function RealVibeApp() {
   };
 
   const loadEverything = async () => {
+    if (!supabase) return;
     setLoading(true);
-    await Promise.all([
-      loadProfile(),
-      loadSwipes(),
-      loadProfiles(),
-      loadSeenWallets(),
-    ]);
-    await loadMyMatches();
+    try {
+      await Promise.all([
+        loadProfile(),
+        loadSwipes(),
+        loadProfiles(),
+        loadSeenWallets(),
+      ]);
+      await loadMyMatches();
+    } catch (err) {
+      console.error('Error en loadEverything:', err);
+      setErrorMessage('Error al cargar datos iniciales');
+    }
     setLoading(false);
   };
 
   // ────────────────────────────────────────────────
-  // Load data functions
+  // Load functions
   // ────────────────────────────────────────────────
   const loadProfile = async () => {
-    if (!walletAddress) return;
+    if (!supabase || !walletAddress) return;
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(`
-        subscription,
-        boost_until,
-        super_likes_used_this_month,
-        boosts_used_this_month,
-        super_likes_monthly_reset_date
-      `)
-      .eq('wallet_address', walletAddress)
-      .single();
-
-    if (error) {
-      console.error('loadProfile error:', error);
-      return;
-    }
-
-    const level = (data?.subscription as SubscriptionLevel) || 'none';
-    setSubscriptionLevel(level);
-
-    // Boost
-    const until = data?.boost_until ? new Date(data.boost_until) : null;
-    setBoostUntil(until);
-    setBoostActive(!!until && until > new Date());
-
-    // Reset mensual
-    const now = new Date();
-    let resetDate = data?.super_likes_monthly_reset_date ? new Date(data.super_likes_monthly_reset_date) : null;
-
-    if (!resetDate || resetDate.getMonth() !== now.getMonth() || resetDate.getFullYear() !== now.getFullYear()) {
-      await supabase
+    try {
+      const { data, error } = await supabase
         .from('profiles')
-        .update({
-          super_likes_used_this_month: 0,
-          boosts_used_this_month: 0,
-          super_likes_monthly_reset_date: now.toISOString(),
-        })
-        .eq('wallet_address', walletAddress);
+        .select(`
+          subscription,
+          boost_until,
+          super_likes_used_this_month,
+          boosts_used_this_month,
+          super_likes_monthly_reset_date
+        `)
+        .eq('wallet_address', walletAddress)
+        .single();
 
-      setSuperLikesUsedThisMonth(0);
-      setBoostsUsedThisMonth(0);
-    } else {
-      setSuperLikesUsedThisMonth(data?.super_likes_used_this_month ?? 0);
-      setBoostsUsedThisMonth(data?.boosts_used_this_month ?? 0);
+      if (error) throw error;
+
+      const level = (data?.subscription as SubscriptionLevel) || 'none';
+      setSubscriptionLevel(level);
+
+      const until = data?.boost_until ? new Date(data.boost_until) : null;
+      setBoostUntil(until);
+      setBoostActive(!!until && until > new Date());
+
+      const now = new Date();
+      let resetDate = data?.super_likes_monthly_reset_date ? new Date(data.super_likes_monthly_reset_date) : null;
+
+      if (!resetDate || resetDate.getMonth() !== now.getMonth() || resetDate.getFullYear() !== now.getFullYear()) {
+        await supabase
+          .from('profiles')
+          .update({
+            super_likes_used_this_month: 0,
+            boosts_used_this_month: 0,
+            super_likes_monthly_reset_date: now.toISOString(),
+          })
+          .eq('wallet_address', walletAddress);
+
+        setSuperLikesUsedThisMonth(0);
+        setBoostsUsedThisMonth(0);
+      } else {
+        setSuperLikesUsedThisMonth(data?.super_likes_used_this_month ?? 0);
+        setBoostsUsedThisMonth(data?.boosts_used_this_month ?? 0);
+      }
+    } catch (err) {
+      console.error('loadProfile error:', err);
+      setErrorMessage('No se pudo cargar el perfil');
     }
   };
 
   const loadSwipes = async () => {
-    if (!walletAddress) return;
+    if (!supabase || !walletAddress) return;
     const today = new Date().toDateString();
     const { data, error } = await supabase
       .from('profiles')
@@ -268,14 +297,13 @@ export default function RealVibeApp() {
     const newCount = Math.max(0, freeSwipesLeft - 1);
     setFreeSwipesLeft(newCount);
     const today = new Date().toDateString();
-    await supabase
-      .from('profiles')
+    await supabase?.from('profiles')
       .update({ free_swipes_left: newCount, last_swipe_date: today })
       .eq('wallet_address', walletAddress);
   };
 
   const loadMyMatches = async () => {
-    if (!walletAddress) return;
+    if (!supabase || !walletAddress) return;
 
     const { data, error } = await supabase
       .from('matches')
@@ -302,7 +330,7 @@ export default function RealVibeApp() {
   };
 
   const loadProfiles = async () => {
-    if (!walletAddress) return;
+    if (!supabase || !walletAddress) return;
     const { data, error } = await supabase
       .from('profiles_public')
       .select('*')
@@ -314,7 +342,7 @@ export default function RealVibeApp() {
   };
 
   const loadSeenWallets = async () => {
-    if (!walletAddress) return;
+    if (!supabase || !walletAddress) return;
 
     const { data, error } = await supabase
       .from('swipes')
@@ -327,7 +355,7 @@ export default function RealVibeApp() {
   };
 
   // ────────────────────────────────────────────────
-  // Wallet connect + World ID
+  // Wallet + World ID
   // ────────────────────────────────────────────────
   const connectWallet = async () => {
     if (!MiniKit.isInstalled()) return showToast('Abre en World App', 'error');
@@ -347,7 +375,7 @@ export default function RealVibeApp() {
       setWalletAddress(address);
       localStorage.setItem('walletAddress', address);
 
-      const { data, error } = await supabase.functions.invoke('generate-wallet-jwt', {
+      const { data, error } = await supabase?.functions.invoke('generate-wallet-jwt', {
         body: { wallet: address },
       });
 
@@ -356,7 +384,7 @@ export default function RealVibeApp() {
         return;
       }
 
-      await supabase.auth.setSession({
+      await supabase?.auth.setSession({
         access_token: data.access_token,
         refresh_token: '',
       });
@@ -372,7 +400,7 @@ export default function RealVibeApp() {
 
     try {
       const { finalPayload } = await MiniKit.commandsAsync.verify({
-        action: 'realvibe_register',  // ← crea esta action en Worldcoin portal (Orb preferido)
+        action: 'realvibe_register',
         verification_level: 'orb',
       });
 
@@ -387,7 +415,7 @@ export default function RealVibeApp() {
   // ────────────────────────────────────────────────
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !walletAddress) return showToast('Selecciona una foto', 'error');
+    if (!file || !walletAddress || !supabase) return showToast('Selecciona una foto', 'error');
 
     const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `\( {walletAddress}. \){fileExt}`;
@@ -411,7 +439,7 @@ export default function RealVibeApp() {
   };
 
   const saveProfile = async () => {
-    if (!walletAddress) return showToast('Conecta wallet primero', 'error');
+    if (!walletAddress || !supabase) return showToast('Conecta wallet primero', 'error');
 
     const verified = await requestWorldIDVerification();
     if (!verified) return showToast('Verificación World ID requerida', 'error');
@@ -434,10 +462,10 @@ export default function RealVibeApp() {
   };
 
   // ────────────────────────────────────────────────
-  // Suscripción (upgrade)
+  // Suscripción
   // ────────────────────────────────────────────────
   const upgradeSubscription = async (level: SubscriptionLevel, wldAmount: number) => {
-    if (!walletAddress || !MiniKit.isInstalled()) return showToast('Abre en World App', 'error');
+    if (!walletAddress || !MiniKit.isInstalled() || !supabase) return showToast('Abre en World App', 'error');
 
     try {
       const amount = tokenToDecimals(wldAmount, 18);
@@ -450,7 +478,6 @@ export default function RealVibeApp() {
 
       if (finalPayload.status !== 'success') return showToast('Pago cancelado', 'error');
 
-      // En producción: verifica transacción en backend
       const { error } = await supabase
         .from('profiles')
         .update({ subscription: level })
@@ -472,7 +499,7 @@ export default function RealVibeApp() {
   // Swipe + Match
   // ────────────────────────────────────────────────
   const handleAction = async (action: 'like' | 'dislike') => {
-    if (!currentProfile) return;
+    if (!currentProfile || !supabase) return;
 
     if (!hasUnlimitedSwipes && freeSwipesLeft <= 0) {
       showToast('Swipes gratis agotados → Boost o suscripción', 'error');
@@ -532,12 +559,12 @@ export default function RealVibeApp() {
   // ────────────────────────────────────────────────
   const activateBoost = async () => {
     if (boostActive) return showToast('Boost ya activo', 'error');
+    if (!supabase) return;
 
     const limit = getBoostLimit(subscriptionLevel);
     const hasQuota = boostsUsedThisMonth < limit;
 
     if (!hasQuota && subscriptionLevel !== 'diamond') {
-      // Pago
       try {
         const amount = tokenToDecimals(BOOST_COST_WLD, 18);
         const { finalPayload } = await MiniKit.commandsAsync.pay({
@@ -560,7 +587,6 @@ export default function RealVibeApp() {
       return;
     }
 
-    // Cupo gratis
     const end = new Date(Date.now() + BOOST_DURATION_HOURS * 60 * 60 * 1000);
     const newUsed = boostsUsedThisMonth + 1;
 
@@ -576,407 +602,11 @@ export default function RealVibeApp() {
   };
 
   const handleSuperLike = async () => {
-    if (!currentProfile) return;
+    if (!currentProfile || !supabase) return;
 
     const limit = getSuperLikeLimit(subscriptionLevel);
     const hasQuota = superLikesUsedThisMonth < limit;
 
     if (!hasQuota && subscriptionLevel !== 'diamond') {
-      // Pago
       try {
-        const amount = tokenToDecimals(SUPERLIKE_COST_WLD, 18);
-        const { finalPayload } = await MiniKit.commandsAsync.pay({
-          to: TREASURY_WALLET,
-          tokens: [{ symbol: Tokens.WLD, token_amount: amount }],
-          description: 'RealVibe Super Like',
-        });
-
-        if (finalPayload.status !== 'success') return showToast('Pago cancelado', 'error');
-
-        await supabase.from('super_likes').insert({
-          from_user: walletAddress!,
-          to_profile: currentProfile.wallet,
-        });
-
-        await handleAction('like');
-        showToast('Super Like enviado (pagado) ⭐', 'success');
-      } catch {
-        showToast('Error pago Super Like', 'error');
-      }
-      return;
-    }
-
-    // Cupo gratis
-    const newUsed = superLikesUsedThisMonth + 1;
-
-    await supabase.from('profiles').update({
-      super_likes_used_this_month: newUsed,
-    }).eq('wallet_address', walletAddress);
-
-    setSuperLikesUsedThisMonth(newUsed);
-
-    await supabase.from('super_likes').insert({
-      from_user: walletAddress!,
-      to_profile: currentProfile.wallet,
-    });
-
-    await handleAction('like');
-    showToast(`Super Like enviado (\( {newUsed}/ \){limit === Infinity ? '∞' : limit}) ⭐`, 'success');
-  };
-
-  // ────────────────────────────────────────────────
-  // Gestos swipe
-  // ────────────────────────────────────────────────
-  const handlePointerDown = (e: React.PointerEvent) => {
-    touchStartX.current = e.clientX;
-    setIsDragging(true);
-    e.preventDefault();
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
-    const deltaX = e.clientX - touchStartX.current;
-    setDragX(deltaX);
-    setDragRot(deltaX / 12);
-    setShowLike(deltaX > 60);
-    setShowDislike(deltaX < -60);
-  };
-
-  const handlePointerUp = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    const threshold = 120;
-
-    if (Math.abs(dragX) > threshold && currentProfile) {
-      const isLike = dragX > 0;
-      setDragX(isLike ? window.innerWidth : -window.innerWidth);
-      setDragRot(isLike ? 45 : -45);
-      setTimeout(() => handleAction(isLike ? 'like' : 'dislike'), 300);
-    } else {
-      resetCard();
-    }
-  };
-
-  const resetCard = () => {
-    setDragX(0);
-    setDragRot(0);
-    setShowLike(false);
-    setShowDislike(false);
-    setIsDragging(false);
-  };
-
-  // ────────────────────────────────────────────────
-  // Chat
-  // ────────────────────────────────────────────────
-  const loadChatMessages = async (matchId: number) => {
-    setChatLoading(true);
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('match_id', matchId)
-      .order('created_at');
-
-    if (error) console.error(error);
-
-    const formatted = (data || []).map(m => ({
-      id: m.id,
-      text: m.message,
-      sender: m.sender_wallet === walletAddress ? 'me' : 'other',
-      time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    }));
-
-    setMessages(formatted);
-    setChatLoading(false);
-  };
-
-  const sendChatMessage = async () => {
-    if (!chatInput.trim() || !currentMatchId || !walletAddress) return;
-
-    const tempId = Date.now();
-    const newMsg: Message = {
-      id: tempId,
-      text: chatInput,
-      sender: 'me',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages(prev => [...prev, newMsg]);
-    const textCopy = chatInput;
-    setChatInput('');
-
-    const { error } = await supabase.from('messages').insert({
-      match_id: currentMatchId,
-      sender_wallet: walletAddress,
-      message: textCopy,
-    });
-
-    if (error) {
-      showToast('Error enviando', 'error');
-      setMessages(prev => prev.filter(m => m.id !== tempId));
-    }
-  };
-
-  const openChat = (match: Match) => {
-    setCurrentMatchId(match.id);
-    setCurrentOtherName(match.otherName);
-    setCurrentOtherImage(match.otherImage);
-    setCurrentScreen('chat');
-    loadChatMessages(match.id);
-  };
-
-  // ────────────────────────────────────────────────
-  // Render
-  // ────────────────────────────────────────────────
-  return (
-    <div style={{ background: '#6C1A36', minHeight: '100vh', color: '#fff', padding: '16px', fontFamily: 'system-ui' }}>
-      {toast && (
-        <div style={{
-          position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
-          padding: '12px 24px', borderRadius: '999px',
-          background: toast.type === 'success' ? '#22c55e' : '#ef4444',
-          color: 'white', zIndex: 1000, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-        }}>
-          {toast.text}
-        </div>
-      )}
-
-      <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handlePhotoUpload} />
-
-      {!walletAddress ? (
-        <div style={{ textAlign: 'center', marginTop: '200px' }}>
-          <button onClick={connectWallet} style={{ padding: '16px 64px', borderRadius: '999px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', color: 'white', border: 'none' }}>
-            Conectar Wallet
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* Botones principales */}
-          <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => setShowProfileForm(true)} style={{ padding: '10px 20px', borderRadius: '999px', background: '#444', color: 'white' }}>Editar perfil</button>
-            <button onClick={() => fileInputRef.current?.click()} style={{ padding: '10px 20px', borderRadius: '999px', background: '#444', color: 'white' }}>Subir foto</button>
-            <button onClick={() => setCurrentScreen('matches')} style={{ padding: '10px 20px', borderRadius: '999px', background: '#444', color: 'white' }}>
-              Matches ({myMatches.length})
-            </button>
-            <button onClick={() => setShowSubscriptionModal(true)} style={{ padding: '10px 20px', borderRadius: '999px', background: 'linear-gradient(90deg, #ffd700, #ff8c00)', color: 'black', fontWeight: 'bold' }}>
-              {subscriptionLevel === 'none' ? 'Upgrade' : subscriptionLevel.toUpperCase()}
-            </button>
-          </div>
-
-          {/* Indicador cupos */}
-          {subscriptionLevel !== 'none' && (
-            <div style={{ textAlign: 'center', margin: '8px 0', fontSize: '0.9rem', opacity: 0.85 }}>
-              Super Likes: {superLikesUsedThisMonth} / {getSuperLikeLimit(subscriptionLevel) === Infinity ? '∞' : getSuperLikeLimit(subscriptionLevel)}
-              {' • '} Boosts: {boostsUsedThisMonth} / {getBoostLimit(subscriptionLevel) === Infinity ? '∞' : getBoostLimit(subscriptionLevel)}
-            </div>
-          )}
-
-          {/* Form perfil */}
-          {showProfileForm && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001 }}>
-              <div style={{ background: '#1a1a1a', padding: '24px', borderRadius: '16px', width: '90%', maxWidth: '400px' }}>
-                <h2>Editar perfil</h2>
-                <input type="text" placeholder="Nombre" value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
-                <input type="number" placeholder="Edad" value={profileForm.age || ''} onChange={e => setProfileForm(p => ({ ...p, age: Number(e.target.value) }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
-                <textarea placeholder="Bio (max 150)" value={profileForm.bio} onChange={e => setProfileForm(p => ({ ...p, bio: e.target.value.slice(0, 150) }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white', minHeight: '80px' }} />
-                <input type="text" placeholder="Ubicación" value={profileForm.location} onChange={e => setProfileForm(p => ({ ...p, location: e.target.value }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
-
-                <button onClick={saveProfile} style={{ width: '100%', padding: '16px', marginTop: '16px', borderRadius: '999px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', color: 'white', border: 'none' }}>Guardar</button>
-                <button onClick={() => setShowProfileForm(false)} style={{ width: '100%', padding: '12px', marginTop: '12px', borderRadius: '999px', background: '#444', color: 'white' }}>Cancelar</button>
-              </div>
-            </div>
-          )}
-
-          {/* Modal suscripción + tabla precios */}
-          {showSubscriptionModal && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1002 }}>
-              <div style={{ background: '#1a1a1a', padding: '24px', borderRadius: '20px', width: '90%', maxWidth: '480px' }}>
-                <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Planes RealVibe</h2>
-
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '0.95rem' }}>
-                  <thead>
-                    <tr style={{ background: '#222' }}>
-                      <th style={{ padding: '10px', border: '1px solid #444' }}>Plan</th>
-                      <th style={{ padding: '10px', border: '1px solid #444' }}>Precio</th>
-                      <th style={{ padding: '10px', border: '1px solid #444' }}>Swipes</th>
-                      <th style={{ padding: '10px', border: '1px solid #444' }}>Super Likes/mes</th>
-                      <th style={{ padding: '10px', border: '1px solid #444' }}>Boosts/mes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>Free</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>0 WLD</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>10/día</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>0</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>0</td>
-                    </tr>
-                    <tr style={{ background: '#2a1a00' }}>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>Gold</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>5 WLD</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>Ilimitados</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>5</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>5</td>
-                    </tr>
-                    <tr style={{ background: '#1a2a3a' }}>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>Platinum</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>15 WLD</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>Ilimitados</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>15</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>10</td>
-                    </tr>
-                    <tr style={{ background: '#3a2a4a' }}>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>Diamond</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>50 WLD</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>Ilimitados</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>∞</td>
-                      <td style={{ padding: '10px', border: '1px solid #444' }}>∞</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <button onClick={() => upgradeSubscription('gold', 5)} style={{ padding: '14px', background: '#2a1a00', borderRadius: '12px', color: '#ffcc00', border: 'none' }}>Gold – 5 WLD</button>
-                  <button onClick={() => upgradeSubscription('platinum', 15)} style={{ padding: '14px', background: '#1a2a3a', borderRadius: '12px', color: '#88ccff', border: 'none' }}>Platinum – 15 WLD</button>
-                  <button onClick={() => upgradeSubscription('diamond', 50)} style={{ padding: '14px', background: '#3a2a4a', borderRadius: '12px', color: '#dd88ff', border: 'none' }}>Diamond – 50 WLD</button>
-                  <button onClick={() => setShowSubscriptionModal(false)} style={{ padding: '12px', background: '#444', borderRadius: '999px', color: 'white' }}>Cancelar</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Contenido principal */}
-          {currentScreen === 'home' && (
-            <>
-              {loading ? (
-                <p style={{ textAlign: 'center' }}>Cargando...</p>
-              ) : availableProfiles.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '100px 20px' }}>
-                  <div style={{ fontSize: '5rem' }}>🌵</div>
-                  <h2>No hay más perfiles</h2>
-                </div>
-              ) : (
-                <div style={{ position: 'relative', height: '520px', maxWidth: '420px', margin: '0 auto' }}>
-                  {availableProfiles.slice(discoverIndex, discoverIndex + 2).map((profile, index) => (
-                    <div
-                      key={profile.wallet}
-                      style={{
-                        position: 'absolute',
-                        top: index * 16,
-                        left: index * 16,
-                        right: index * 16,
-                        transform: index === 0 ? `translateX(\( {dragX}px) rotate( \){dragRot}deg)` : `scale(${1 - index * 0.05})`,
-                        transition: 'transform 0.35s ease-out',
-                        zIndex: 10 - index,
-                      }}
-                    >
-                      <div
-                        onPointerDown={index === 0 ? handlePointerDown : undefined}
-                        onPointerMove={index === 0 ? handlePointerMove : undefined}
-                        onPointerUp={index === 0 ? handlePointerUp : undefined}
-                        onPointerCancel={resetCard}
-                        style={{
-                          background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
-                          borderRadius: '24px',
-                          padding: '20px',
-                          boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-                          cursor: index === 0 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-                        }}
-                      >
-                        <img src={profile.image} alt={profile.name} style={{ width: '100%', borderRadius: '16px', marginBottom: '16px' }} />
-                        <h2>{profile.name}, {profile.age || '?'}</h2>
-                        <p>{profile.bio}</p>
-                        <p>📍 {profile.location}</p>
-                      </div>
-                    </div>
-                  ))}
-
-                  {isDragging && currentProfile && (
-                    <>
-                      {showLike && <div style={{ position: 'absolute', top: '80px', right: '60px', fontSize: '8rem', opacity: Math.min(1, dragX / 300) }}>❤️</div>}
-                      {showDislike && <div style={{ position: 'absolute', top: '80px', left: '60px', fontSize: '8rem', opacity: Math.min(1, Math.abs(dragX) / 300) }}>👎</div>}
-                    </>
-                  )}
-
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '340px', flexWrap: 'wrap' }}>
-                    <button onClick={() => handleAction('dislike')} style={{ padding: '16px 40px', background: '#444', borderRadius: '999px', fontSize: '1.5rem' }}>👎</button>
-
-                    <button onClick={activateBoost} disabled={boostActive} style={{ padding: '16px 28px', background: boostActive ? '#555' : 'linear-gradient(90deg, #00bfff, #1e90ff)', borderRadius: '999px', color: 'white', border: 'none' }}>
-                      {boostActive ? 'Boost ON' : 'Boost 24h'}
-                    </button>
-
-                    <button onClick={handleSuperLike} style={{ padding: '16px 40px', background: 'linear-gradient(90deg, #ffd700, #ffaa00)', borderRadius: '999px', fontSize: '1.5rem', color: 'black' }}>
-                      ⭐
-                    </button>
-
-                    <button onClick={() => handleAction('like')} style={{ padding: '16px 40px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', borderRadius: '999px', fontSize: '1.5rem' }}>❤️</button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {currentScreen === 'matches' && (
-            <div style={{ maxWidth: '420px', margin: '0 auto' }}>
-              <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'white' }}>←</button>
-              <h2>Mis Matches ({myMatches.length})</h2>
-              {myMatches.length === 0 ? (
-                <p style={{ textAlign: 'center', marginTop: '80px' }}>Aún sin matches</p>
-              ) : (
-                myMatches.map(match => (
-                  <div key={match.id} onClick={() => openChat(match)} style={{ display: 'flex', alignItems: 'center', background: '#222', padding: '12px', borderRadius: '16px', margin: '12px 0', cursor: 'pointer' }}>
-                    <img src={match.otherImage} style={{ width: '60px', height: '60px', borderRadius: '50%', marginRight: '16px' }} alt="" />
-                    <div>
-                      <div style={{ fontWeight: 'bold' }}>{match.otherName}</div>
-                      <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>Chatea ahora</div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {currentScreen === 'chat' && (
-            <div style={{ maxWidth: '420px', margin: '0 auto' }}>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                <button onClick={() => setCurrentScreen('matches')} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'white' }}>←</button>
-                <img src={currentOtherImage} style={{ width: '50px', height: '50px', borderRadius: '50%', margin: '0 12px' }} alt="" />
-                <h2>{currentOtherName}</h2>
-              </div>
-
-              <div style={{ height: '60vh', overflowY: 'auto', background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '16px' }}>
-                {chatLoading ? <p>Cargando...</p> : messages.map(msg => (
-                  <div key={msg.id} style={{ margin: '10px 0', textAlign: msg.sender === 'me' ? 'right' : 'left' }}>
-                    <div style={{
-                      display: 'inline-block',
-                      padding: '10px 16px',
-                      borderRadius: '18px',
-                      background: msg.sender === 'me' ? '#8a2be2' : '#444',
-                      maxWidth: '75%'
-                    }}>
-                      {msg.text}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '4px' }}>{msg.time}</div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-                <input
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
-                  placeholder="Mensaje..."
-                  style={{ flex: 1, padding: '12px 16px', borderRadius: '999px', background: '#222', color: 'white', border: 'none' }}
-                  onKeyPress={e => e.key === 'Enter' && sendChatMessage()}
-                />
-                <button onClick={sendChatMessage} style={{ padding: '12px 24px', borderRadius: '999px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', color: 'white', border: 'none' }}>
-                  Enviar
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
+        const amount = tokenToDecimals(SUPERLIKE
