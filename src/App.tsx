@@ -9,10 +9,11 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
   : null;
 
+const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 const MAX_FREE_SWIPES_PER_DAY = 10;
 const MAX_MESSAGE_LENGTH = 500;
+const VISIBLE_CARDS = 3;
 
-// Tipos
 type SubscriptionLevel = 'none' | 'gold' | 'platinum' | 'diamond';
 
 type Message = {
@@ -94,7 +95,7 @@ export default function RealVibeApp() {
   }, [profiles, myMatches, seenWallets]);
 
   const visibleProfiles = useMemo(() => {
-    return availableProfiles.slice(discoverIndex, discoverIndex + 3);
+    return availableProfiles.slice(discoverIndex, discoverIndex + VISIBLE_CARDS);
   }, [availableProfiles, discoverIndex]);
 
   const topProfile = visibleProfiles[0] || null;
@@ -292,6 +293,7 @@ export default function RealVibeApp() {
     if (updateError) return showToast('Foto subida pero no se actualizó perfil', 'error');
 
     showToast('Foto de perfil actualizada', 'success');
+    loadProfiles();
   };
 
   const saveProfile = async () => {
@@ -315,6 +317,7 @@ export default function RealVibeApp() {
 
     showToast('Perfil guardado', 'success');
     setShowProfileForm(false);
+    loadProfiles();
   };
 
   const handleAction = async (action: 'like' | 'dislike') => {
