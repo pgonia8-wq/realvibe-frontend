@@ -2,20 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { MiniKit } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const MAX_FREE_SWIPES_PER_DAY = 10;
 
 export default function RealVibeApp() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [freeSwipesLeft, setFreeSwipesLeft] = useState(MAX_FREE_SWIPES_PER_DAY);
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [discoverIndex, setDiscoverIndex] = useState(0);
+  const [supabaseStatus, setSupabaseStatus] = useState<string>('Probando Supabase...');
 
   useEffect(() => {
     const init = async () => {
@@ -27,36 +23,24 @@ export default function RealVibeApp() {
           setWalletAddress(stored);
         }
 
+        // Prueba simple: ver si Supabase responde
+        const { data, error } = await supabase.from('profiles_public').select('count').single();
+
+        if (error) {
+          throw new Error('Supabase error: ' + error.message);
+        }
+
+        setSupabaseStatus('Supabase conectado OK (encontró la tabla)');
         setLoading(false);
       } catch (err) {
-        setError('Error inicial: ' + (err as Error).message);
+        setError('Error al inicializar: ' + (err as Error).message);
+        setSupabaseStatus('Error en Supabase: ' + (err as Error).message);
         setLoading(false);
       }
     };
 
     init();
   }, []);
-
-  useEffect(() => {
-    if (!walletAddress) return;
-
-    const loadProfiles = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles_public')
-          .select('*')
-          .neq('wallet', walletAddress);
-
-        if (error) throw error;
-
-        setProfiles(data || []);
-      } catch (err) {
-        setError('Error cargando perfiles: ' + (err as Error).message);
-      }
-    };
-
-    loadProfiles();
-  }, [walletAddress]);
 
   const connectWallet = async () => {
     try {
@@ -84,27 +68,14 @@ export default function RealVibeApp() {
 
   return (
     <div style={{ background: '#6C1A36', minHeight: '100vh', color: 'white', padding: '40px', textAlign: 'center' }}>
-      <h1 style={{ color: 'white' }}>RealVibe - Versión Funcional</h1>
+      <h1 style={{ color: 'white' }}>RealVibe - Test Supabase</h1>
 
       {walletAddress ? (
         <>
           <p>Wallet conectada: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</p>
           <p style={{ marginTop: '20px', fontSize: '1.3rem' }}>
-            Swipes restantes: {freeSwipesLeft}/{MAX_FREE_SWIPES_PER_DAY}
+            {supabaseStatus}
           </p>
-
-          {profiles.length === 0 ? (
-            <div style={{ marginTop: '40px' }}>
-              <h2>No hay más perfiles</h2>
-              <p>Vuelve más tarde o invita amigos</p>
-            </div>
-          ) : (
-            <div style={{ marginTop: '40px' }}>
-              <h2>¡Perfiles cargados!</h2>
-              <p>Total: {profiles.length}</p>
-              <p>Primer perfil: {profiles[0]?.name || 'Sin nombre'} ({profiles[0]?.wallet?.slice(0, 6)}...)</p>
-            </div>
-          )}
         </>
       ) : (
         <button 
@@ -115,7 +86,9 @@ export default function RealVibeApp() {
         </button>
       )}
 
-      {error && <p style={{ color: '#ff4d4d', marginTop: '40px' }}>{error}</p>}
+      {error && <p style={{ color: '#ff4d4d', marginTop: '40px', fontSize: '1.2rem' }}>
+        ERROR: {error}
+      </p>}
     </div>
   );
-          }
+                                            }
