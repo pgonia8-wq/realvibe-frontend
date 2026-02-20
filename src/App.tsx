@@ -83,7 +83,9 @@ export default function RealVibeApp() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ────────────────────────────────────────────────
   // Computed
+  // ────────────────────────────────────────────────
   const availableProfiles = useMemo(() => {
     const matched = new Set(myMatches.map(m => m.otherWallet));
     return profiles.filter(p => 
@@ -97,7 +99,9 @@ export default function RealVibeApp() {
 
   const topProfile = visibleProfiles[0] || null;
 
+  // ────────────────────────────────────────────────
   // Inicialización
+  // ────────────────────────────────────────────────
   useEffect(() => { MiniKit.install(); }, []);
 
   useEffect(() => {
