@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MiniKit, Tokens, tokenToDecimals } from '@worldcoin/minikit-js';
+import { MiniKit } from '@worldcoin/minikit-js';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -9,10 +9,8 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
   : null;
 
-const TREASURY_WALLET = '0xdf4a991bc05945bd0212e773adcff6ea619f4c4b';
 const MAX_FREE_SWIPES_PER_DAY = 10;
 const MAX_MESSAGE_LENGTH = 500;
-const VISIBLE_CARDS = 3;
 
 type SubscriptionLevel = 'none' | 'gold' | 'platinum' | 'diamond';
 
@@ -94,11 +92,10 @@ export default function RealVibeApp() {
     );
   }, [profiles, myMatches, seenWallets]);
 
-  const visibleProfiles = useMemo(() => {
-    return availableProfiles.slice(discoverIndex, discoverIndex + VISIBLE_CARDS);
+  const topProfile = useMemo(() => {
+    if (availableProfiles.length === 0) return null;
+    return availableProfiles[discoverIndex % availableProfiles.length];
   }, [availableProfiles, discoverIndex]);
-
-  const topProfile = visibleProfiles[0] || null;
 
   // ────────────────────────────────────────────────
   // Inicialización
@@ -244,10 +241,7 @@ export default function RealVibeApp() {
       .select('to_profile')
       .eq('from_user', walletAddress);
 
-    if (error) {
-      console.error('Error cargando vistos:', error);
-      return;
-    }
+    if (error) return console.error('Error cargando vistos:', error);
 
     setSeenWallets(new Set(data?.map(s => s.to_profile) || []));
   };
@@ -303,7 +297,6 @@ export default function RealVibeApp() {
     if (updateError) return showToast('Foto subida pero no se actualizó perfil', 'error');
 
     showToast('Foto de perfil actualizada', 'success');
-    loadProfiles();
   };
 
   const saveProfile = async () => {
@@ -327,7 +320,6 @@ export default function RealVibeApp() {
 
     showToast('Perfil guardado', 'success');
     setShowProfileForm(false);
-    loadProfiles();
   };
 
   const handleAction = async (action: 'like' | 'dislike') => {
@@ -445,38 +437,27 @@ export default function RealVibeApp() {
     setIsDragging(false);
   };
 
-  // Render
+  // Render final
   if (currentScreen === 'chat' && currentMatchId) {
     return (
       <div style={{ background: '#6C1A36', minHeight: '100vh', color: '#fff', padding: '16px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.8rem', marginRight: '16px' }}>← Volver</button>
-          <img src={currentOtherImage} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%', marginRight: '12px' }} />
-          <h2>{currentOtherName}</h2>
-        </div>
-
+        <button onClick={() => setCurrentScreen('home')} style={{ alignSelf: 'flex-start', marginBottom: '16px' }}>← Volver</button>
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px', background: 'rgba(0,0,0,0.25)', borderRadius: '16px', marginBottom: '16px' }}>
-          {chatLoading ? (
-            <p>Cargando mensajes...</p>
-          ) : messages.length === 0 ? (
-            <p style={{ textAlign: 'center', color: '#aaa' }}>Di hola para empezar</p>
-          ) : (
-            messages.map(msg => (
-              <div key={msg.id} style={{ margin: '12px 0', display: 'flex', justifyContent: msg.sender === 'me' ? 'flex-end' : 'flex-start' }}>
-                <div style={{
-                  maxWidth: '70%',
-                  padding: '12px 16px',
-                  borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                  background: msg.sender === 'me' ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : 'rgba(255,255,255,0.15)',
-                }}>
-                  {msg.text}
-                  <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px', textAlign: msg.sender === 'me' ? 'right' : 'left' }}>
-                    {msg.time}
-                  </div>
+          {messages.map(msg => (
+            <div key={msg.id} style={{ margin: '12px 0', display: 'flex', justifyContent: msg.sender === 'me' ? 'flex-end' : 'flex-start' }}>
+              <div style={{
+                maxWidth: '70%',
+                padding: '12px 16px',
+                borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                background: msg.sender === 'me' ? 'linear-gradient(90deg, #ff69b4, #8a2be2)' : 'rgba(255,255,255,0.15)',
+              }}>
+                {msg.text}
+                <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px', textAlign: msg.sender === 'me' ? 'right' : 'left' }}>
+                  {msg.time}
                 </div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
           {isOtherTyping && <p style={{ color: '#aaa', fontStyle: 'italic' }}>{currentOtherName} está escribiendo...</p>}
           <div ref={messagesEndRef} />
         </div>
@@ -568,4 +549,18 @@ export default function RealVibeApp() {
                   transform: index === 0 ? `translateX(\( {dragX}px) rotate( \){dragRot}deg)` : `scale(${1 - index * 0.05})`,
                   transition: 'transform 0.35s ease-out',
                   zIndex: 10 - index,
-             
+                }}>
+                  <div
+                    onPointerDown={index === 0 ? handlePointerDown : undefined}
+                    onPointerMove={index === 0 ? handlePointerMove : undefined}
+                    onPointerUp={index === 0 ? handlePointerUp : undefined}
+                    onPointerCancel={resetCard}
+                    style={{
+                      background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
+                      borderRadius: '24px',
+                      padding: '20px',
+                      boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+                    }}
+                  >
+                    <img src={profile.image} alt={profile.name} style={{ width: '100%', borderRadius: '16px', marginBottom: '16px' }} />
+          
