@@ -61,7 +61,7 @@ export default function App() {
     }
   }, []);
 
-  // Cargar mensajes + realtime
+  // Cargar mensajes desde Supabase + realtime
   useEffect(() => {
     if (currentScreen !== 'chat' || !walletAddress) return;
 
@@ -75,23 +75,16 @@ export default function App() {
       if (error) {
         console.error('Error cargando mensajes:', error);
         showToast('Error al cargar chat', 'error');
-        setMessages(INITIAL_MESSAGES); // fallback a fake si falla
         return;
       }
 
-      console.log('Mensajes cargados de Supabase:', data?.length || 0, 'registros');
-
-      if (data.length === 0) {
-        setMessages(INITIAL_MESSAGES);
-      } else {
-        const mapped = data.map(msg => ({
-          id: msg.id,
-          text: msg.text,
-          sender: msg.sender_id === walletAddress ? 'me' : 'other',
-          time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }));
-        setMessages(mapped);
-      }
+      const mapped = data.map(msg => ({
+        id: msg.id,
+        text: msg.text,
+        sender: msg.sender_id === walletAddress ? 'me' : 'other',
+        time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }));
+      setMessages(mapped.length > 0 ? mapped : INITIAL_MESSAGES);
     };
 
     loadMessages();
@@ -103,24 +96,12 @@ export default function App() {
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${TEST_MATCH_ID}` },
         (payload) => {
           const newMsg = payload.new;
-          console.log('Realtime: nuevo mensaje recibido', newMsg);
-
-          const isMyMessage = newMsg.sender_id === walletAddress;
-          const timeDiff = Math.abs(Date.now() - new Date(newMsg.created_at).getTime());
-
-          // Evitamos duplicado inmediato de mensajes propios
-          if (isMyMessage && timeDiff < 6000) {
-            console.log('Ignorando mensaje propio reciente (ya lo agregó el optimista)');
-            return;
-          }
-
           const mappedMsg = {
             id: newMsg.id,
             text: newMsg.text,
-            sender: isMyMessage ? 'me' : 'other',
+            sender: newMsg.sender_id === walletAddress ? 'me' : 'other',
             time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
-
           setMessages(prev => [...prev, mappedMsg]);
         }
       )
@@ -218,55 +199,18 @@ export default function App() {
     showToast(`¡${action.toUpperCase()} enviado!`);
   };
 
-  const sendMessage = async () => {
-    if (!chatInput.trim() || !walletAddress) {
-      if (!walletAddress) showToast('Conecta tu wallet primero', 'error');
-      return;
-    }
+  const sendMessage = () => {
+    if (!chatInput.trim()) return;
 
-    const messageText = chatInput.trim();
-    const optimisticId = 'temp-' + Date.now();
-
-    const optimisticMsg = {
-      id: optimisticId,
-      text: messageText,
+    const newMsg = {
+      id: messages.length + 1,
+      text: chatInput.trim(),
       sender: 'me',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages(prev => [...prev, optimisticMsg]);
+    setMessages([...messages, newMsg]);
     setChatInput('');
-
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          match_id: TEST_MATCH_ID,
-          sender_id: walletAddress,
-          text: messageText,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('ERROR SUPABASE INSERT:', error);
-        throw error;
-      }
-
-      console.log('INSERT EXITOSO - ID real:', data.id);
-
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === optimisticId ? { ...msg, id: data.id } : msg
-        )
-      );
-
-      showToast('Mensaje enviado', 'success');
-    } catch (err) {
-      console.error('Error al guardar mensaje:', err);
-      setMessages(prev => prev.filter(m => m.id !== optimisticId));
-      showToast('No se pudo enviar el mensaje', 'error');
-    }
   };
 
   if (currentScreen === 'chat') {
@@ -538,4 +482,28 @@ export default function App() {
             </div>
           </div>
 
-          <p style={{ textAlign: 'center', marginTop: '20px', opacity: 0.8 }}>P
+          <p style={{ textAlign: 'center', marginTop: '20px', opacity: 0.8 }}>Próximamente: más perfiles y chat realtime</p>
+        </>
+      )}
+
+      <button 
+        onClick={() => setCurrentScreen('chat')}
+        style={{
+          position: 'fixed',
+          bottom: '25px',
+          right: '25px',
+          background: 'linear-gradient(45deg, pink, #ff69b4)',
+          color: '#000',
+          padding: '16px 24px',
+          borderRadius: '50px',
+          fontWeight: 'bold',
+          border: 'none',
+          boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
+          zIndex: 1000
+        }}
+      >
+        Chat
+      </button>
+    </div>
+  );
+}
