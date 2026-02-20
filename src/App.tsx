@@ -8,7 +8,6 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const MAX_FREE_SWIPES_PER_DAY = 10;
-const MAX_MESSAGE_LENGTH = 500;
 
 // Tipos básicos
 type Profile = {
@@ -21,18 +20,10 @@ type Profile = {
   wallet: string;
 };
 
-type Match = {
-  id: number;
-  otherWallet: string;
-  otherName: string;
-  otherImage: string;
-};
-
 export default function RealVibeApp() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [freeSwipesLeft, setFreeSwipesLeft] = useState(MAX_FREE_SWIPES_PER_DAY);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [myMatches, setMyMatches] = useState<Match[]>([]);
   const [discoverIndex, setDiscoverIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -40,13 +31,14 @@ export default function RealVibeApp() {
   const [dragX, setDragX] = useState(0);
   const [dragRot, setDragRot] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [showLike, setShowLike] = useState(false);
+  const [showDislike, setShowDislike] = useState(false);
 
   const touchStartX = useRef(0);
 
-  // ────────────────────────────────────────────────
-  // Inicialización
-  // ────────────────────────────────────────────────
   useEffect(() => {
+    MiniKit.install();
+
     const stored = localStorage.getItem('walletAddress');
     if (stored) setWalletAddress(stored);
   }, []);
@@ -60,16 +52,18 @@ export default function RealVibeApp() {
     const loadData = async () => {
       setLoading(true);
 
-      // Cargar perfiles desde Supabase (perfiles públicos)
-      const { data: profilesData } = await supabase
+      // Cargar perfiles desde Supabase
+      const { data: profilesData, error } = await supabase
         .from('profiles_public')
         .select('*')
         .neq('wallet', walletAddress);
 
-      setProfiles(profilesData || []);
-
-      // Cargar swipes restantes (simulado)
-      setFreeSwipesLeft(MAX_FREE_SWIPES_PER_DAY);
+      if (error) {
+        console.error('Error cargando perfiles:', error);
+        setToast('No se pudieron cargar perfiles');
+      } else {
+        setProfiles(profilesData || []);
+      }
 
       setLoading(false);
     };
@@ -79,7 +73,7 @@ export default function RealVibeApp() {
 
   const connectWallet = async () => {
     if (!MiniKit.isInstalled()) {
-      showToast('Abre la app dentro de World App');
+      setToast('Abre la app dentro de World App');
       return;
     }
 
@@ -95,11 +89,11 @@ export default function RealVibeApp() {
         if (address) {
           setWalletAddress(address);
           localStorage.setItem('walletAddress', address);
-          showToast('Wallet conectada');
+          setToast('Wallet conectada');
         }
       }
     } catch (err) {
-      showToast('Error al conectar wallet');
+      setToast('Error al conectar wallet');
     }
   };
 
@@ -110,7 +104,12 @@ export default function RealVibeApp() {
 
   const handleAction = (action: 'like' | 'dislike') => {
     if (!topProfile) return;
-    showToast(action === 'like' ? 'Like enviado' : 'Dislike registrado');
+    setToast(action === 'like' ? 'Like enviado' : 'Dislike registrado');
+
+    if (freeSwipesLeft > 0) {
+      setFreeSwipesLeft(prev => prev - 1);
+    }
+
     setDiscoverIndex(prev => prev + 1);
   };
 
@@ -139,6 +138,7 @@ export default function RealVibeApp() {
           background: 'rgba(0,0,0,0.7)',
           borderRadius: '999px',
           zIndex: 1000,
+          color: 'white',
         }}>
           {toast}
         </div>
@@ -182,10 +182,40 @@ export default function RealVibeApp() {
                   transition: isDragging ? 'none' : 'transform 0.4s ease-out',
                   touchAction: 'none',
                 }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={resetCard}
+                onPointerDown={(e) => {
+                  touchStartX.current = e.clientX;
+                  setIsDragging(true);
+                  e.preventDefault();
+                }}
+                onPointerMove={(e) => {
+                  if (!isDragging) return;
+                  const deltaX = e.clientX - touchStartX.current;
+                  setDragX(deltaX);
+                  setDragRot(deltaX / 12);
+                  setShowLike(deltaX > 60);
+                  setShowDislike(deltaX < -60);
+                }}
+                onPointerUp={() => {
+                  setIsDragging(false);
+                  if (Math.abs(dragX) > 120) {
+                    const isLike = dragX > 0;
+                    setDragX(isLike ? window.innerWidth : -window.innerWidth);
+                    setDragRot(isLike ? 45 : -45);
+                    setTimeout(() => handleAction(isLike ? 'like' : 'dislike'), 300);
+                  } else {
+                    setDragX(0);
+                    setDragRot(0);
+                    setShowLike(false);
+                    setShowDislike(false);
+                  }
+                }}
+                onPointerCancel={() => {
+                  setDragX(0);
+                  setDragRot(0);
+                  setShowLike(false);
+                  setShowDislike(false);
+                  setIsDragging(false);
+                }}
               >
                 <div style={{
                   background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
