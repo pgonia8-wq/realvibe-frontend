@@ -39,14 +39,6 @@ type Match = {
   otherImage: string;
 };
 
-const POTENTIAL_PROFILES: Profile[] = [
-  { id: 1, name: 'José', age: 24, bio: 'Música electrónica y tacos al pastor 🌮', location: 'CDMX', image: 'https://picsum.photos/id/64/450/600', wallet: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e' },
-  { id: 2, name: 'Ana', age: 26, bio: 'Arte urbano y café de especialidad ☕', location: 'Guadalajara', image: 'https://picsum.photos/id/1011/450/600', wallet: '0x8Ba1B4fC4bA6c9e7f2d5a3b9c8d7e6f5a4b3c2d1' },
-  { id: 3, name: 'Carlos', age: 23, bio: 'Futbol amateur y League of Legends ⚽', location: 'Monterrey', image: 'https://picsum.photos/id/201/450/600', wallet: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' },
-  { id: 4, name: 'Sofía', age: 25, bio: 'Viajes y fotografía amateur ✈️', location: 'Puebla', image: 'https://picsum.photos/id/1005/450/600', wallet: '0x9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1098' },
-  { id: 5, name: 'Miguel', age: 28, bio: 'Blockchain y mezcal 🥃', location: 'CDMX', image: 'https://picsum.photos/id/669/450/600', wallet: '0x3f2e1d0c9b8a7f6e5d4c3b2a1098765432109876' },
-];
-
 export default function RealVibeApp() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [subscriptionLevel, setSubscriptionLevel] = useState<SubscriptionLevel>('none');
@@ -96,7 +88,7 @@ export default function RealVibeApp() {
   // ────────────────────────────────────────────────
   const availableProfiles = useMemo(() => {
     const matched = new Set(myMatches.map(m => m.otherWallet));
-    return [...POTENTIAL_PROFILES, ...profiles].filter(p => 
+    return profiles.filter(p => 
       !matched.has(p.wallet) && !seenWallets.has(p.wallet)
     );
   }, [profiles, myMatches, seenWallets]);
@@ -322,7 +314,6 @@ export default function RealVibeApp() {
 
     showToast('Perfil guardado', 'success');
     setShowProfileForm(false);
-    loadProfiles();
   };
 
   const handleAction = async (action: 'like' | 'dislike') => {
@@ -549,4 +540,23 @@ export default function RealVibeApp() {
                   top: index * 16,
                   left: index * 16,
                   right: index * 16,
-                  trans
+                  transform: index === 0 ? `translateX(\( {dragX}px) rotate( \){dragRot}deg)` : `scale(${1 - index * 0.05})`,
+                  transition: 'transform 0.35s ease-out',
+                  zIndex: 10 - index,
+                }}>
+                  <div
+                    onPointerDown={index === 0 ? handlePointerDown : undefined}
+                    onPointerMove={index === 0 ? handlePointerMove : undefined}
+                    onPointerUp={index === 0 ? handlePointerUp : undefined}
+                    onPointerCancel={resetCard}
+                    style={{
+                      background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
+                      borderRadius: '24px',
+                      padding: '20px',
+                      boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+                    }}
+                  >
+                    <img src={profile.image} alt={profile.name} style={{ width: '100%', borderRadius: '16px', marginBottom: '16px' }} />
+                    <h2>{profile.name}, {profile.age}</h2>
+                    <p>{profile.bio}</p>
+                    <p>📍 {profil
