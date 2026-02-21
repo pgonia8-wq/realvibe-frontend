@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-let supabase;
+let supabase = null;
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
   supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 } else {
@@ -94,6 +94,7 @@ export default function RealVibeApp() {
     location: '',
   });
 
+  // Límites por plan
   const getSuperLikeLimit = (level: SubscriptionLevel) => {
     switch (level) {
       case 'gold': return 5;
@@ -128,10 +129,11 @@ export default function RealVibeApp() {
     return availableProfiles[discoverIndex % availableProfiles.length];
   }, [availableProfiles, discoverIndex]);
 
+  // Inicialización y efectos
   useEffect(() => {
     if (!supabase) {
       setHasCriticalError(true);
-      setErrorMessage('Supabase no configurado. Revisa variables en Vercel: VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY');
+      setErrorMessage('Supabase no está configurado. Revisa variables en Vercel: VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY');
     }
   }, []);
 
@@ -150,6 +152,7 @@ export default function RealVibeApp() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Realtime chat
   useEffect(() => {
     if (!supabase || currentScreen !== 'chat' || !currentMatchId || !walletAddress) return;
 
@@ -599,4 +602,225 @@ export default function RealVibeApp() {
           <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => setShowProfileForm(true)} style={{ padding: '10px 20px', borderRadius: '999px', background: '#444', color: 'white' }}>Editar perfil</button>
             <button onClick={() => fileInputRef.current?.click()} style={{ padding: '10px 20px', borderRadius: '999px', background: '#444', color: 'white' }}>Subir foto</button>
-            <button onClick={() => setCurrentScreen('matches')} style={{ padding: '10px 20px', borderRadius: '999px', background
+            <button onClick={() => setCurrentScreen('matches')} style={{ padding: '10px 20px', borderRadius: '999px', background: '#444', color: 'white' }}>
+              Matches ({myMatches.length})
+            </button>
+            <button onClick={() => setShowSubscriptionModal(true)} style={{ padding: '10px 20px', borderRadius: '999px', background: 'linear-gradient(90deg, #ffd700, #ff8c00)', color: 'black', fontWeight: 'bold' }}>
+              {subscriptionLevel === 'none' ? 'Upgrade' : subscriptionLevel.toUpperCase()}
+            </button>
+          </div>
+
+          {subscriptionLevel !== 'none' && (
+            <div style={{ textAlign: 'center', margin: '8px 0', fontSize: '0.9rem', opacity: 0.85 }}>
+              Super Likes: {superLikesUsedThisMonth} / {getSuperLikeLimit(subscriptionLevel) === Infinity ? '∞' : getSuperLikeLimit(subscriptionLevel)}
+              {' • '} Boosts: {boostsUsedThisMonth} / {getBoostLimit(subscriptionLevel) === Infinity ? '∞' : getBoostLimit(subscriptionLevel)}
+            </div>
+          )}
+
+          {showProfileForm && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001 }}>
+              <div style={{ background: '#1a1a1a', padding: '24px', borderRadius: '16px', width: '90%', maxWidth: '400px' }}>
+                <h2>Editar perfil</h2>
+                <input type="text" placeholder="Nombre" value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
+                <input type="number" placeholder="Edad" value={profileForm.age || ''} onChange={e => setProfileForm(p => ({ ...p, age: Number(e.target.value) }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
+                <textarea placeholder="Bio (max 150)" value={profileForm.bio} onChange={e => setProfileForm(p => ({ ...p, bio: e.target.value.slice(0, 150) }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white', minHeight: '80px' }} />
+                <input type="text" placeholder="Ubicación" value={profileForm.location} onChange={e => setProfileForm(p => ({ ...p, location: e.target.value }))} style={{ width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', background: '#333', color: 'white' }} />
+
+                <button onClick={saveProfile} style={{ width: '100%', padding: '16px', marginTop: '16px', borderRadius: '999px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', color: 'white', border: 'none' }}>Guardar</button>
+                <button onClick={() => setShowProfileForm(false)} style={{ width: '100%', padding: '12px', marginTop: '12px', borderRadius: '999px', background: '#444', color: 'white' }}>Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          {showSubscriptionModal && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1002 }}>
+              <div style={{ background: '#1a1a1a', padding: '24px', borderRadius: '20px', width: '90%', maxWidth: '480px' }}>
+                <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Planes RealVibe</h2>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '0.95rem' }}>
+                  <thead>
+                    <tr style={{ background: '#222' }}>
+                      <th style={{ padding: '10px', border: '1px solid #444' }}>Plan</th>
+                      <th style={{ padding: '10px', border: '1px solid #444' }}>Precio</th>
+                      <th style={{ padding: '10px', border: '1px solid #444' }}>Swipes</th>
+                      <th style={{ padding: '10px', border: '1px solid #444' }}>Super Likes/mes</th>
+                      <th style={{ padding: '10px', border: '1px solid #444' }}>Boosts/mes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>Free</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>0 WLD</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>10/día</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>0</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>0</td>
+                    </tr>
+                    <tr style={{ background: '#2a1a00' }}>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>Gold</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>5 WLD</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>Ilimitados</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>5</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>5</td>
+                    </tr>
+                    <tr style={{ background: '#1a2a3a' }}>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>Platinum</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>15 WLD</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>Ilimitados</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>15</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>10</td>
+                    </tr>
+                    <tr style={{ background: '#3a2a4a' }}>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>Diamond</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>50 WLD</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>Ilimitados</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>∞</td>
+                      <td style={{ padding: '10px', border: '1px solid #444' }}>∞</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <button onClick={() => upgradeSubscription('gold', 5)} style={{ padding: '14px', background: '#2a1a00', borderRadius: '12px', color: '#ffcc00', border: 'none' }}>Gold – 5 WLD</button>
+                  <button onClick={() => upgradeSubscription('platinum', 15)} style={{ padding: '14px', background: '#1a2a3a', borderRadius: '12px', color: '#88ccff', border: 'none' }}>Platinum – 15 WLD</button>
+                  <button onClick={() => upgradeSubscription('diamond', 50)} style={{ padding: '14px', background: '#3a2a4a', borderRadius: '12px', color: '#dd88ff', border: 'none' }}>Diamond – 50 WLD</button>
+                  <button onClick={() => setShowSubscriptionModal(false)} style={{ padding: '12px', background: '#444', borderRadius: '999px', color: 'white' }}>Cancelar</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {currentScreen === 'home' && (
+            <>
+              {loading ? (
+                <p style={{ textAlign: 'center' }}>Cargando...</p>
+              ) : availableProfiles.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '100px 20px' }}>
+                  <div style={{ fontSize: '5rem' }}>🌵</div>
+                  <h2>No hay más perfiles</h2>
+                </div>
+              ) : (
+                <div style={{ position: 'relative', height: '520px', maxWidth: '420px', margin: '0 auto' }}>
+                  {availableProfiles.slice(discoverIndex, discoverIndex + 2).map((profile, index) => (
+                    <div
+                      key={profile.wallet}
+                      style={{
+                        position: 'absolute',
+                        top: index * 16,
+                        left: index * 16,
+                        right: index * 16,
+                        transform: index === 0 ? `translateX(\( {dragX}px) rotate( \){dragRot}deg)` : `scale(${1 - index * 0.05})`,
+                        transition: 'transform 0.35s ease-out',
+                        zIndex: 10 - index,
+                      }}
+                    >
+                      <div
+                        onPointerDown={index === 0 ? handlePointerDown : undefined}
+                        onPointerMove={index === 0 ? handlePointerMove : undefined}
+                        onPointerUp={index === 0 ? handlePointerUp : undefined}
+                        onPointerCancel={resetCard}
+                        style={{
+                          background: 'linear-gradient(135deg, #ff69b4, #8a2be2)',
+                          borderRadius: '24px',
+                          padding: '20px',
+                          boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+                          cursor: index === 0 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                        }}
+                      >
+                        <img src={profile.image} alt={profile.name} style={{ width: '100%', borderRadius: '16px', marginBottom: '16px' }} />
+                        <h2>{profile.name}, {profile.age || '?'}</h2>
+                        <p>{profile.bio}</p>
+                        <p>📍 {profile.location}</p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {isDragging && currentProfile && (
+                    <>
+                      {showLike && <div style={{ position: 'absolute', top: '80px', right: '60px', fontSize: '8rem', opacity: Math.min(1, dragX / 300) }}>❤️</div>}
+                      {showDislike && <div style={{ position: 'absolute', top: '80px', left: '60px', fontSize: '8rem', opacity: Math.min(1, Math.abs(dragX) / 300) }}>👎</div>}
+                    </>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '340px', flexWrap: 'wrap' }}>
+                    <button onClick={() => handleAction('dislike')} style={{ padding: '16px 40px', background: '#444', borderRadius: '999px', fontSize: '1.5rem' }}>👎</button>
+
+                    <button onClick={activateBoost} disabled={boostActive} style={{ padding: '16px 28px', background: boostActive ? '#555' : 'linear-gradient(90deg, #00bfff, #1e90ff)', borderRadius: '999px', color: 'white', border: 'none' }}>
+                      {boostActive ? 'Boost ON' : 'Boost 24h'}
+                    </button>
+
+                    <button onClick={handleSuperLike} style={{ padding: '16px 40px', background: 'linear-gradient(90deg, #ffd700, #ffaa00)', borderRadius: '999px', fontSize: '1.5rem', color: 'black' }}>
+                      ⭐
+                    </button>
+
+                    <button onClick={() => handleAction('like')} style={{ padding: '16px 40px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', borderRadius: '999px', fontSize: '1.5rem' }}>❤️</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {currentScreen === 'matches' && (
+            <div style={{ maxWidth: '420px', margin: '0 auto' }}>
+              <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'white' }}>←</button>
+              <h2>Mis Matches ({myMatches.length})</h2>
+              {myMatches.length === 0 ? (
+                <p style={{ textAlign: 'center', marginTop: '80px' }}>Aún sin matches</p>
+              ) : (
+                myMatches.map(match => (
+                  <div key={match.id} onClick={() => openChat(match)} style={{ display: 'flex', alignItems: 'center', background: '#222', padding: '12px', borderRadius: '16px', margin: '12px 0', cursor: 'pointer' }}>
+                    <img src={match.otherImage} style={{ width: '60px', height: '60px', borderRadius: '50%', marginRight: '16px' }} alt="" />
+                    <div>
+                      <div style={{ fontWeight: 'bold' }}>{match.otherName}</div>
+                      <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>Chatea ahora</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {currentScreen === 'chat' && (
+            <div style={{ maxWidth: '420px', margin: '0 auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                <button onClick={() => setCurrentScreen('matches')} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'white' }}>←</button>
+                <img src={currentOtherImage} style={{ width: '50px', height: '50px', borderRadius: '50%', margin: '0 12px' }} alt="" />
+                <h2>{currentOtherName}</h2>
+              </div>
+
+              <div style={{ height: '60vh', overflowY: 'auto', background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '16px' }}>
+                {chatLoading ? <p>Cargando...</p> : messages.map(msg => (
+                  <div key={msg.id} style={{ margin: '10px 0', textAlign: msg.sender === 'me' ? 'right' : 'left' }}>
+                    <div style={{
+                      display: 'inline-block',
+                      padding: '10px 16px',
+                      borderRadius: '18px',
+                      background: msg.sender === 'me' ? '#8a2be2' : '#444',
+                      maxWidth: '75%'
+                    }}>
+                      {msg.text}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '4px' }}>{msg.time}</div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
+                  placeholder="Mensaje..."
+                  style={{ flex: 1, padding: '12px 16px', borderRadius: '999px', background: '#222', color: 'white', border: 'none' }}
+                  onKeyPress={e => e.key === 'Enter' && sendChatMessage()}
+                />
+                <button onClick={sendChatMessage} style={{ padding: '12px 24px', borderRadius: '999px', background: 'linear-gradient(90deg, #ff69b4, #8a2be2)', color: 'white', border: 'none' }}>
+                  Enviar
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
